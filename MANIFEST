@@ -8,4 +8,5 @@ t/11modif.t
 t/20prewrite.t
 t/30examp_oo.t
 t/31examp_fun.t
+t/40utf8.t
 xt/99pod.t

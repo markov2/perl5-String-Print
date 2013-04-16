@@ -1,5 +1,14 @@
 
 ========== version history of String::Print
 
+version 0.11: Tue Apr 16 12:27:54 CEST 2013
+	Fixes:
+	- require perl 5.10 for '//' operator [cpantesters]
+	- fix tests to use gmtime, not localtime [cpantesters]
+	- some documentation layout improvements [search.cpan.org]
+	- in examples: strftime "%TT%FZ" --> "%FT%TZ", of course
+	- in tests: Windows doesn't support %T nor %F, expand format
+	- any format with strings must be transformed into utf8
+
 version 0.10: Mon Apr 15 12:06:32 CEST 2013
 	- implementation, documentation and regression tests.

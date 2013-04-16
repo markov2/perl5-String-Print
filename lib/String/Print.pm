@@ -5,7 +5,7 @@ package String::Print;
 
 #use Log::Report::Optional 'log-report';
 
-use Encode            qw/is_utf8/;
+use Encode            qw/is_utf8 decode/;
 use Unicode::GCString ();
 
 my @default_modifiers   = ( qr/%\S+/ => \&_format_printf );
@@ -61,26 +61,28 @@ C<printf> and C<sprintf> alternatives via both an object oriented and a
 functional interface.
 
 Read in the L<DETAILS> chapter below, why this module provides a better
-alternative for C<printf()>.  Also, some examples can be found there.
-Take a look at them first!
+alternative for C<printf()>.  Also, some extended B<examples> can be
+found there.  Take a look at them first!
 
 =chapter METHODS
 
 =section The Object Oriented interface
 
 See functions M<printi()>, M<sprinti()>, M<printp()>, and M<sprintp()>: you
-can also call them as method.  Same functionality:
+can also call them as method.
 
   use String::Print 'oo';
   my $f = String::Print->new(%config);
   $f->printi($format, @params);
 
+  # exactly the same functionality:
   use String::Print 'printi', %config;
   printi $format, @params;
 
 The Object Oriented interface wins when you need the same configuration
 in multiple source files, or when you need different configurations
-within one program.
+within one program.  In these cases, the hassle of explicitly using the
+object has some benefits.
 
 =section Constructors
 
@@ -160,7 +162,7 @@ sub addModifiers(@) {my $self = shift; unshift @{$self->{LRF_modif}}, @_}
 The functional interface creates a hidden object.  You may import any of
 these functions explicitly, or all together by not specifying the names.
 
-Examples:
+=examples
 
   use String::Print;           # all
   use String::Print 'sprinti'; # only sprinti
@@ -205,7 +207,7 @@ sub sprinti($@)
 
     $args->{_join} //= ', ';
 
-    my $result = $format;
+    my $result = is_utf8($format) ? $format : decode(latin1 => $format);
     $result    =~ s/\{(\w+)\s*([^}]*?)\s*\}/$self->_expand($1,$2,$args)/ge;
 
     $result    = $args->{_prepend} . $result if defined $args->{_prepend};
@@ -258,18 +260,19 @@ sub _format_printf($$$$)
 
     }
 
-    return sprintf $format, $value
-        unless is_utf8 $value
-            && $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sc])$/;
+    $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sc])$/
+        or return sprintf $format, $value;   # simple: not a string
+    my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
 
-    # String formats like %10s or %-3.5s count characters, no width.
+    # String formats like %10s or %-3.5s count characters, not width.
     # String formats like %10c or %-3.5c are subject to column width.
     # The latter means: minimal 3 chars, max 5, padding right with blanks.
+    # All inserted strings are upgraded into utf8.
 
-    my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
-    my $s = Unicode::GCString->new($value);
+    my $s = Unicode::GCString->new
+      ( is_utf8($value) ? $value : decode(latin1 => $value));
+
     my $pad;
-
     if($u eq 'c')
     {   # too large to fit
         return $value if !$max && $width && $width <= $s->columns;
@@ -412,29 +415,37 @@ Especially useful in context of translations, the FORMAT string may
 contain (language specific) helpers to insert the values correctly.
 
 =item correct use of utf8
-Sized string formatting in C<printf()> is broken: it takes your value
-as bytes, not Perl strings (maybe unicode).  In Unicode, one character
-may use many bytes.  Also, some characters are double wide, for instance
-in Chinese.  The M<printi()> implementation will use M<Unicode::GCString>
-for correct behavior.
+Sized string formatting in C<printf()> is broken: it takes your string
+as bytes, not Perl strings (maybe utf8).  In utf8 encoded unicode,
+one character may use many bytes.  Also, some characters are double
+wide, for instance in Chinese.  The M<printi()> implementation will use
+M<Unicode::GCString> for correct behavior.
 
 =back
 
 =section Three components
 
-To fill-in a FORMAT, three clearly separated components play a role:
+To fill-in a FORMAT, three clearly separated components play a role.
 
 =over 4
-=item serializer
-How to represent the data correctly, for instance C<undef> and
-ARRAYs.
 =item modifiers
-How to change the serialized data into text, to be inserted in the
-FORMAT.
+How to change the provided values, for instance to hide locale
+differences.
+=item serializer
+How to represent (modified) the values correctly, for instance C<undef>
+and ARRAYs.
 =item conversion
 The standard UNIX conversion rules, like C<%d>.  One conversion rule
 has been changed 'c', for unicode correct behavior.
 =back
+
+Simplified:
+
+  # sprinti() replaces {$key$modifiers$conversion} by
+  $conversion->($serializer->($modifiers->($arg{$key})))
+
+  # sprintp() replaces %pos{$modifiers}$conversion by
+  $conversion->($serializer->($modifiers->($arg[$pos])))
 
 =section Interpolation, the serialization of variables
 
@@ -495,7 +506,7 @@ get interpolated in the line.
 
 =subsection Modifiers: unix format
 
-Next to the name, you can specify a format code.  With C<gettext()>,
+Next to the name, you can specify a format code.  With (gnu) C<gettext()>,
 you often see this:
 
  printf gettext("approx pi: %.6f\n"), PI;
@@ -515,13 +526,14 @@ With C<Log::Report>, above syntaxes do work, but you can also do:
  # with optional translations
  print __x"approx pi: {pi%.6f}\n", pi => PI;
 
-The standard M<printi()> is without smart behavior
+The base for C<__x()> is the M<printi()> provided by this module. Internally,
+it will call C<printi> to fill in parameters:
 
  printi   "approx pi: {pi%.6f}\n", pi => PI;
 
 Another example:
 
- printi "{perms} {links%2d} {user%-8s} {size%10d} {fn}\n"
+ printi "{perms} {links%2d} {user%-8s} {size%10d} {fn%c}\n"
     , perms => '-rw-r--r--', links => 7, user => 'me'
     , size => '12345', fn => $filename;
 
@@ -593,18 +605,18 @@ the paramter from the modifer.
       my $time_format
         = $modif eq 'T'  ? '%T'
         : $modif eq 'D'  ? '%F'
-        : $modif eq 'DT' ? '%TT%FZ'
+        : $modif eq 'DT' ? '%FT%TZ'
         :                  'ERROR';
-      strftime $time_format, localtime($value);
+      strftime $time_format, gmtime($value);
     };
 
-  printi "time: {t T}",  t => $now;  # time: 12:59:17
+  printi "time: {t T}",  t => $now;  # time: 10:59:17
   printi "date: {t D }", t => $now;  # date: 2013-04-13
-  printi "both: {t DT}", t => $now;  # both: 12:59:17T2013-04-13Z
+  printi "both: {t DT}", t => $now;  # both: 2013-04-13T10:59:17Z
 
-  printp "time: %{T}s",  $now;       # time: 12:59:17
+  printp "time: %{T}s",  $now;       # time: 10:59:17
   printp "date: %{D}s",  $now;       # date: 2013-04-13
-  printp "both: %{DT}s", $now;       # both: 12:59:17T2013-04-13Z
+  printp "both: %{DT}s", $now;       # both: 2013-04-13T10:59:17Z
 
 =subsection Modifiers: stacking
 

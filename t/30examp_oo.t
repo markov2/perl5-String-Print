@@ -29,17 +29,18 @@ is($f->sprinti("count: {c}#", c => undef), 'count: -#');
 
 $f->addModifiers( qr/T|DT|D/ =>
    sub { my ($formatter, $modif, $value, $args) = @_;
+         # Windows does not support full POSIX, no %T nor %F
          my $time_format
-           = $modif eq 'T'  ? '%T'
-           : $modif eq 'D'  ? '%F'
-           : $modif eq 'DT' ? '%TT%FZ'
+           = $modif eq 'T'  ? '%H:%M:%S'
+           : $modif eq 'D'  ? '%Y-%m-%d'
+           : $modif eq 'DT' ? '%Y-%m-%dT%H:%M:%SZ'
            :                  'ERROR';
-         strftime $time_format, localtime($value);
+         strftime $time_format, gmtime($value);
        } );
 
 my $now = 1365850757;
 
-is($f->sprinti("time: {t T }", t => $now), 'time: 12:59:17', 'time');
+is($f->sprinti("time: {t T }", t => $now), 'time: 10:59:17', 'time');
 is($f->sprinti("date: {t D }", t => $now), 'date: 2013-04-13', 'date');
-is($f->sprinti("both: {t DT}", t => $now), 'both: 12:59:17T2013-04-13Z', 'dateTime');
-is($f->sprinti("#{t T%10s}#", t => $now), '#  12:59:17#', 'stacked');
+is($f->sprinti("both: {t DT}", t => $now), 'both: 2013-04-13T10:59:17Z', 'dateTime');
+is($f->sprinti("#{t T%10s}#", t => $now), '#  10:59:17#', 'stacked');
