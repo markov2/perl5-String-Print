@@ -1,6 +1,14 @@
 
 ========== version history of String::Print
 
+version 0.12: Mon Apr 29 09:16:23 CEST 2013
+	Changes:
+	- %c --> %S [Amsterdam Perl Mongers]
+
+	Improvements:
+	- docs: correct syntax for links to alternative modules.
+	- docs: PND -> GBP [H.Merijn Brand]
+
 version 0.11: Tue Apr 16 12:27:54 CEST 2013
 	Fixes:
 	- require perl 5.10 for '//' operator [cpantesters]

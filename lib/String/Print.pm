@@ -260,12 +260,12 @@ sub _format_printf($$$$)
 
     }
 
-    $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sc])$/
+    $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
         or return sprintf $format, $value;   # simple: not a string
     my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
 
     # String formats like %10s or %-3.5s count characters, not width.
-    # String formats like %10c or %-3.5c are subject to column width.
+    # String formats like %10S or %-3.5S are subject to column width.
     # The latter means: minimal 3 chars, max 5, padding right with blanks.
     # All inserted strings are upgraded into utf8.
 
@@ -273,7 +273,7 @@ sub _format_printf($$$$)
       ( is_utf8($value) ? $value : decode(latin1 => $value));
 
     my $pad;
-    if($u eq 'c')
+    if($u eq 'S')
     {   # too large to fit
         return $value if !$max && $width && $width <= $s->columns;
 
@@ -436,7 +436,7 @@ How to represent (modified) the values correctly, for instance C<undef>
 and ARRAYs.
 =item conversion
 The standard UNIX conversion rules, like C<%d>.  One conversion rule
-has been changed 'c', for unicode correct behavior.
+has been added 'S', for unicode correct behavior.
 =back
 
 Simplified:
@@ -533,7 +533,7 @@ it will call C<printi> to fill in parameters:
 
 Another example:
 
- printi "{perms} {links%2d} {user%-8s} {size%10d} {fn%c}\n"
+ printi "{perms} {links%2d} {user%-8s} {size%10d} {fn%S}\n"
     , perms => '-rw-r--r--', links => 7, user => 'me'
     , size => '12345', fn => $filename;
 
@@ -554,10 +554,10 @@ count bytes but characters.  C<printi()> does not use characters but
 "grapheme clusters" via M<Unicode::GCString>.  Now, also composed
 characters do work correctly.
 
-Additionally, you can use the B<new 'c' conversion> to count in columns.
+Additionally, you can use the B<new 'S' conversion> to count in columns.
 In fixed-width fonts, graphemes can have width 0, 1 or 2.  For instance,
 Chinese characters have width 2.  When printing in fixed-width, this
-'c' is probably the better choice over 's'.
+'S' is probably the better choice over 's'.
 
 =subsection Modifiers: private modifiers
 
@@ -576,14 +576,14 @@ In function syntax
   { my ($formatter, $modif, $value, $args) = @_;
 
       $modif eq '€' ? sprintf("%.2f EUR", $value+0.0001)
-    : $modif eq '₤' ? sprintf("%.2f PND", $value/1.23+0.0001)
+    : $modif eq '₤' ? sprintf("%.2f GBP", $value/1.23+0.0001)
     :                 'ERROR';
   }
 
 Now:
 
   printi "price: {p€}", p => $pi;   # price: 3.14 EUR
-  printi "price: {p₤}", p => $pi;   # price: 2.55 PND
+  printi "price: {p₤}", p => $pi;   # price: 2.55 GBP
 
 This is very useful in the translation context, where the translator
 can specify abstract formatting.  Using M<printp()> makes it a little
@@ -591,7 +591,7 @@ shorter, but will become quite complex when there are more parameter
 in one string:
 
   printp "price: %{€}s", $pi;       # price: 3.14 EUR
-  printp "price: %{₤}s", $pi;       # price: 2.55 PND
+  printp "price: %{₤}s", $pi;       # price: 2.55 GBP
 
 Another example.  Now, we want to add timestamps.  In this case, we
 decide for modifier names in C<\w>, so we need a blank to separate
@@ -637,14 +637,14 @@ The modifiers are called in order:
 
 There are a few more modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
-F<http://search.cpan.org/~darren/String-Format|String::Format>,
-F<http://http://search.cpan.org/~rjbs/String-Errf|String::Errf>,
-F<http://http://search.cpan.org/~rjbs/String-Formatter|String::Formatter>,
-F<http://search.cpan.org/~shlomif/Text-Sprintf-Named|Text::Sprintf::Named>,
-F<http://search.cpan.org/~gfuji/Acme-StringFormat|Acme::StringFormat>,
-F<http://search.cpan.org/~sharyanto/Text-sprintfn|Text::sprintf>,
-F<http://search.cpan.org/~frew/Log-Sprintf|Log::Sprintf>, and
-F<http://search.cpan.org/~bartl/String-Sprintf|String::Sprintf>.
+L<String::Format|http://search.cpan.org/~darren/String-Format>,
+L<String::Errf|http://http://search.cpan.org/~rjbs/String-Errf>,
+L<String::Formatter|http://http://search.cpan.org/~rjbs/String-Formatter>,
+L<Text::Sprintf::Named|http://search.cpan.org/~shlomif/Text-Sprintf-Named>,
+L<Acme::StringFormat|http://search.cpan.org/~gfuji/Acme-StringFormat>,
+L<Text::sprintf|http://search.cpan.org/~sharyanto/Text-sprintfn>,
+L<Log::Sprintf|http://search.cpan.org/~frew/Log-Sprintf>, and
+L<String::Sprintf|http://search.cpan.org/~bartl/String-Sprintf>.
 They are all slightly different.
 
 When the C<String::Print> module got created, none of the mentioned above
