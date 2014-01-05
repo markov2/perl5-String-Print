@@ -4,7 +4,7 @@
 use warnings;
 use strict;
 use utf8;
-use Test::More tests => 13;
+use Test::More tests => 16;
 
 use String::Print;
 
@@ -23,6 +23,10 @@ is( $f->sprinti("a={a%d} b={b %.2f}", a => 007, b => $pi)
 # multi-byte characters
 my $short = "€éö";
 is( $f->sprinti("c={z%s}x",   z => $short), "c=${short}x" );
+is( $f->sprinti("c2={z %s}x", z => $short), "c2=${short}x" );
+is( $f->sprinti("c3={ z%s}x", z => $short), "c3=${short}x" );
+is( $f->sprinti("c4={ z %s}x", z => $short), "c4=${short}x" );
+
 is( $f->sprinti("d={z%5s}x",  z => $short), "d=  ${short}x" );
 is( $f->sprinti("e={z%-5s}x", z => $short), "e=${short}  x" );
 is( $f->sprinti("f={z%5s}x",  z => "${short}yzzz"), "f=${short}yzzzx" );

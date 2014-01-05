@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-use Test::More tests => 14;
+use Test::More tests => 16;
 
 use String::Print;
 
@@ -23,6 +23,9 @@ is($f->sprinti("#{v}#", v => {a => 3, b => 5})
 
 is($f->sprinti("#{v}#", v => sub {18}),'#18#', 'CODE');
 is($f->sprinti("#{v}#", v => sub {sub {19}}),'#19#', 'CODE CODE');
+
+is($f->sprinti("#{v}#", v => \50),'#50#', 'SCALAR');
+is($f->sprinti("#{v}#", v => \undef),'#undef#', 'SCALAR undef');
 
 my $g = String::Print->new
   ( serializers =>

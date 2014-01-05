@@ -12,6 +12,7 @@ my @default_modifiers   = ( qr/%\S+/ => \&_format_printf );
 my %default_serializers =
  ( UNDEF     => sub { 'undef' }
  , ''        => sub { $_[1]   }
+ , SCALAR    => sub { ${$_[1]} // shift->{LRF_seri}{UNDEF}->(@_) }
  , ARRAY     =>
      sub { my $v = $_[1]; my $join = $_[2]{_join} // ', ';
            join $join, map +($_ // 'undef'), @$v;
@@ -26,7 +27,8 @@ my %default_serializers =
 =encoding utf8
 
 =chapter NAME
-String::Print - printf alternatives
+
+String::Print - printf alternative
 
 =chapter SYNOPSIS
 
@@ -35,7 +37,7 @@ String::Print - printf alternatives
 
  # interpolation of arrays and hashes
  printi 'age {years}', years => 12;
- printi 'price-list: {prices%.2f}', prices => \@prices;
+ printi 'price-list: {prices%.2f}', prices => \@prices, _join => "+";
  printi 'dump: {hash}', hash => \%config;
 
  # same with positional parameters
@@ -62,7 +64,8 @@ functional interface.
 
 Read in the L<DETAILS> chapter below, why this module provides a better
 alternative for C<printf()>.  Also, some extended B<examples> can be
-found there.  Take a look at them first!
+found there.  Take a look at them first, when you start using this
+module!
 
 =chapter METHODS
 
@@ -147,11 +150,19 @@ sub import(@)
     *{"$pkg\::sprinti"} = sub { $f->sprinti(@_) } if $all || $func{sprinti};
     *{"$pkg\::printp"}  = sub { $f->printp(@_)  } if $all || $func{printp};
     *{"$pkg\::sprintp"} = sub { $f->sprintp(@_) } if $all || $func{sprintp};
+    $class;
 }
 
 #-------------
 =section Attributes
+
 =method addModifiers PAIRS
+The PAIRS are a combination of an selector and a CODE which processes the
+value when the modifier matches.  The selector is a string or (preferred)
+a regular expression. Later modifiers with the same name overrule earlier
+definitions.  You may also specify an ARRAY of modifiers per C<print>.
+
+See section L</"Interpolation: Modifiers"> about the details.
 =cut
 
 sub addModifiers(@) {my $self = shift; unshift @{$self->{LRF_modif}}, @_}
@@ -189,13 +200,14 @@ more specials to the parameter list.
 
 =option  _join STRING
 =default _join ', '
-Which STRING to be used when an ARRAY is being filled-in.
+Which STRING to use when an ARRAY is being filled-in as parameter.
 
-=option  _prepend STRING
+=option  _prepend STRING|OBJECT
 =default _prepend C<undef>
-Text as STRING prepended before FORMAT, without interpolation.
+Text as STRING prepended before FORMAT, without interpolation.  This
+may also be an OBJECT which gets stringified, but variables not filled-in.
 
-=option  _append  STRING
+=option  _append  STRING|OBJECT
 =default _append  C<undef>
 Text as STRING appended after FORMAT, without interpolation.
 
@@ -208,7 +220,10 @@ sub sprinti($@)
     $args->{_join} //= ', ';
 
     my $result = is_utf8($format) ? $format : decode(latin1 => $format);
-    $result    =~ s/\{(\w+)\s*([^}]*?)\s*\}/$self->_expand($1,$2,$args)/ge;
+
+    # quite hard to check for a bareword :(
+    $result    =~ s/\{\s* ( [\pL\p{Pc}\pM]\w* )\s*( [^}]*? )\s*\}/
+                    $self->_expand($1,$2,$args)/gxe;
 
     $result    = $args->{_prepend} . $result if defined $args->{_prepend};
     $result   .= $args->{_append}            if defined $args->{_append};
@@ -255,13 +270,13 @@ sub _format_printf($$$$)
     }
     elsif(ref $value eq 'HASH')
     {   keys %$value or return '(none)';
-        return { map +($_ => $self->_format_print($format,$value->{$_},$args)),
-                   keys %$value } ;
-
+        return { map +($_ => $self->_format_print($format, $value->{$_}, $args))
+                   , keys %$value } ;
     }
 
     $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
         or return sprintf $format, $value;   # simple: not a string
+
     my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
 
     # String formats like %10s or %-3.5s count characters, not width.
@@ -277,7 +292,8 @@ sub _format_printf($$$$)
     {   # too large to fit
         return $value if !$max && $width && $width <= $s->columns;
 
-        # wider than max.  Waiting for $s->trim($max) if $max
+        # wider than max.  Waiting for $s->trim($max) if $max, see
+        # https://rt.cpan.org/Public/Bug/Display.html?id=84549
         $s->substr(-1, 1, '')
            while $max && $s->columns > $max;
 
@@ -333,13 +349,13 @@ then fed into M<sprinti()>.  Be careful with the length of the LIST:
 superfluous parameter PAIRS are passed along to C<sprinti()>, and
 should only contain "specials".
 
-=example
+=example of the rewrite
 
   # positional parameters
   my $x = sprintp "dumpfiles: %s\n", \@dumpfiles
      , _join => ':';
 
-  # rewriten and processed as
+  # is rewriten into, and then processed as
   my $x = sprinti "dumpfiles: {filenames}\n"
      , filenames => \@dumpfiles, _join => ':';
 
@@ -391,7 +407,7 @@ sub sprintp(@)
 #-------------------
 =chapter DETAILS
 
-=section Why C<printi()>, not C<printf()>?
+=section Why use C<printi()>, not C<printf()>?
 
 The C<printf()> function is provided by Perl's CORE; you do not need
 to install any module to use it.  Why would you use consider using
@@ -400,7 +416,7 @@ this module?
 =over 4
 
 =item translating
-C<printf()> uses positional values, where M<printi()> uses names
+C<printf()> uses positional parameters, where M<printi()> uses names
 to refer to the values to be filled-in.  Especially in a set-up with
 translations, where the format strings get extracted into PO-files,
 it is much clearer to use names.  This is also a disadvantage of
@@ -416,38 +432,48 @@ contain (language specific) helpers to insert the values correctly.
 
 =item correct use of utf8
 Sized string formatting in C<printf()> is broken: it takes your string
-as bytes, not Perl strings (maybe utf8).  In utf8 encoded unicode,
-one character may use many bytes.  Also, some characters are double
-wide, for instance in Chinese.  The M<printi()> implementation will use
-M<Unicode::GCString> for correct behavior.
+as bytes, not Perl strings (which may be utf8).  In unicode, one
+"character" may use many bytes.  Also, some characters are displayed
+double wide, for instance in Chinese.  The M<printi()> implementation
+will use M<Unicode::GCString> for correct behavior.
 
 =back
 
 =section Three components
 
-To fill-in a FORMAT, three clearly separated components play a role.
+To fill-in a FORMAT, three clearly separated components play a role:
 
 =over 4
-=item modifiers
+=item 1. modifiers
 How to change the provided values, for instance to hide locale
 differences.
-=item serializer
-How to represent (modified) the values correctly, for instance C<undef>
+=item 2. serializer
+How to represent (the modified) the values correctly, for instance C<undef>
 and ARRAYs.
-=item conversion
-The standard UNIX conversion rules, like C<%d>.  One conversion rule
-has been added 'S', for unicode correct behavior.
+=item 3. conversion
+The standard UNIX format rules, like C<%d>.  One conversion rule
+has been added 'S', which provides unicode correct behavior.
 =back
 
 Simplified:
 
-  # sprinti() replaces {$key$modifiers$conversion} by
-  $conversion->($serializer->($modifiers->($arg{$key})))
+  # sprinti() replaces "{$key$modifiers$conversion}" by
+  $conversion->($serializer->($modifiers->($args{$key})))
 
-  # sprintp() replaces %pos{$modifiers}$conversion by
+  # sprintp() replaces "%pos{$modifiers}$conversion" by
   $conversion->($serializer->($modifiers->($arg[$pos])))
 
-=section Interpolation, the serialization of variables
+Example:
+
+  printi "price: {price € %-10s}", price => $cost;
+  printp "price: %-10{€}s", $cost;
+
+  $conversion = column width %-10s
+  $serializer = show float as string
+  $modifier   = € to local currency
+  $value      = $cost (in €)
+
+=section Interpolation: Serialization
 
 The 'interpolation' functions have named VARIABLES to be filled-in, but
 also additional OPTIONS.  To distinguish between the OPTIONS and VARIABLES
@@ -455,7 +481,6 @@ also additional OPTIONS.  To distinguish between the OPTIONS and VARIABLES
 an underscore C<_>.  As result of this, please avoid the use of keys
 which start with an underscore in variable names.  On the other hand,
 you are allowed to interpolate OPTION values in your strings.
-
 
 There is no way of checking beforehand whether you have provided all
 values to be interpolated in the translated string.  When you refer to
@@ -471,10 +496,15 @@ For interpolating, the following rules apply:
 =item strings
 Simple scalar values are interpolated "as is"
 
+=item SCALAR
+Takes the value where the scalar reference points to.
+
 =item ARRAY
 All members will be interpolated with C<,␣> between the elements.
 Alternatively (maybe nicer), you can pass an interpolation parameter
 via the C<_join> OPTION.
+
+  printi "matching files: {files}", files => \@files, _join => ', '
 
 =item HASH
 By default, HASHes are interpolated with sorted keys,
@@ -533,18 +563,17 @@ it will call C<printi> to fill in parameters:
 
 Another example:
 
- printi "{perms} {links%2d} {user%-8s} {size%10d} {fn%S}\n"
-    , perms => '-rw-r--r--', links => 7, user => 'me'
-    , size => '12345', fn => $filename;
+ printi "{perms} {links%2d} {user%-8s} {size%10d} {fn}\n"
+   , perms => '-rw-r--r--', links => 7, user => 'me'
+   , size => 12345, fn => $filename;
 
 An additional advantage is the fact that not all languages produce
 comparable length strings.  Now, the translators can take care that
-the layout of tables is optimal.
-
-Above example in M<printp()> syntax, shorter but less maintainable:
+the layout of tables is optimal.  Above example in M<printp()> syntax,
+shorter but less maintainable:
 
  printp "%s %2d %-8s 10d %s\n"
-    , '-rw-r--r--', 7, 'me', '12345', $filename;
+   , '-rw-r--r--', 7, 'me', 12345, $filename;
 
 =subsection Modifiers: unix format improvements
 
@@ -557,41 +586,49 @@ characters do work correctly.
 Additionally, you can use the B<new 'S' conversion> to count in columns.
 In fixed-width fonts, graphemes can have width 0, 1 or 2.  For instance,
 Chinese characters have width 2.  When printing in fixed-width, this
-'S' is probably the better choice over 's'.
+'S' is probably the better choice over 's'.  When the field does not
+specify its width, then there is no performance penalty for using 'S'.
 
 =subsection Modifiers: private modifiers
 
-You may pass your own modifiers.  In Object Oriented syntax:
+You may pass your own modifiers.  A modifier consists of a selector and
+a CODE, which is called when the selector matches.  The selector is either
+a string or a regular expression.
 
+  # in Object Oriented syntax:
   my $f = String::Print->new
     ( modifiers => [ qr/[€₤]/ => \&money ]
     );
 
-In function syntax
-
+  # in function syntax:
   use String::Print 'printi', 'sprinti'
     , modifiers => [ qr/[€₤]/ => \&money ];
 
+  # the implementation:
   sub money$$$$)
   { my ($formatter, $modif, $value, $args) = @_;
 
       $modif eq '€' ? sprintf("%.2f EUR", $value+0.0001)
-    : $modif eq '₤' ? sprintf("%.2f GBP", $value/1.23+0.0001)
+    : $modif eq '₤' ? sprintf("%.2f GBP", $value/1.16+0.0001)
     :                 'ERROR';
   }
 
-Now:
+Using M<printp()> makes it a little shorter, but will become quite
+complex when there are more parameter in one string.
 
   printi "price: {p€}", p => $pi;   # price: 3.14 EUR
-  printi "price: {p₤}", p => $pi;   # price: 2.55 GBP
-
-This is very useful in the translation context, where the translator
-can specify abstract formatting.  Using M<printp()> makes it a little
-shorter, but will become quite complex when there are more parameter
-in one string:
+  printi "price: {p₤}", p => $pi;   # price: 2.71 GBP
 
   printp "price: %{€}s", $pi;       # price: 3.14 EUR
-  printp "price: %{₤}s", $pi;       # price: 2.55 GBP
+  printp "price: %{₤}s", $pi;       # price: 2.71 GBP
+
+This is very useful in the translation context, where the translator can
+specify abstract formatting rules.  As example, see the (GNU) gettext
+files, in the translation table for Dutch into English.  The translator
+tells us which currency to use in the display.
+
+  msgid  "kostprijs: {p€}"
+  msgstr "price: {p₤}"
 
 Another example.  Now, we want to add timestamps.  In this case, we
 decide for modifier names in C<\w>, so we need a blank to separate
@@ -635,7 +672,7 @@ The modifiers are called in order:
 
 =section Compared to other modules on CPAN
 
-There are a few more modules on CPAN which extend the functionality
+There are a quite a number of modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
 L<String::Format|http://search.cpan.org/~darren/String-Format>,
 L<String::Errf|http://http://search.cpan.org/~rjbs/String-Errf>,
@@ -647,12 +684,13 @@ L<Log::Sprintf|http://search.cpan.org/~frew/Log-Sprintf>, and
 L<String::Sprintf|http://search.cpan.org/~bartl/String-Sprintf>.
 They are all slightly different.
 
-When the C<String::Print> module got created, none of the mentioned above
-natively handled unicode correctly.  Global configuration of serializers,
-and modifiers is usually not possible, but only provided per function
-call.  Only C<String::Print> cleanly separates the roles of serializers,
-modifiers, and conversions.
+When the C<String::Print> module was created, none of the modules
+mentioned above handled unicode correctly.  Global configuration
+of serializers and modifiers is also usually not possible, sometimes
+provided per explicit function call.  Only C<String::Print> cleanly
+separates the roles of serializers, modifiers, and conversions.
 
+C<String::Print> is nicely integrated with M<Log::Report>.
 =cut
 
 1;

@@ -1,6 +1,13 @@
 
 ========== version history of String::Print
 
+version 0.13: Sun Jan  5 16:51:09 CET 2014
+	Improvements:
+	- docs: fune-tuning
+	- serializer for SCALAR
+	- accept blanks around names of interpolated variable names
+	- accept digits in variable names, not as first character.
+
 version 0.12: Mon Apr 29 09:16:23 CEST 2013
 	Changes:
 	- %c --> %S [Amsterdam Perl Mongers]
