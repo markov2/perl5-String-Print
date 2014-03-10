@@ -1,7 +1,13 @@
 
 ========== version history of String::Print
 
+version 0.14: Mon Mar 10 16:11:30 CET 2014
+
+	Improvements:
+	- changed documentation style
+
 version 0.13: Sun Jan  5 16:51:09 CET 2014
+
 	Improvements:
 	- docs: fune-tuning
 	- serializer for SCALAR
@@ -9,6 +15,7 @@ version 0.13: Sun Jan  5 16:51:09 CET 2014
 	- accept digits in variable names, not as first character.
 
 version 0.12: Mon Apr 29 09:16:23 CEST 2013
+
 	Changes:
 	- %c --> %S [Amsterdam Perl Mongers]
 
@@ -17,6 +24,7 @@ version 0.12: Mon Apr 29 09:16:23 CEST 2013
 	- docs: PND -> GBP [H.Merijn Brand]
 
 version 0.11: Tue Apr 16 12:27:54 CEST 2013
+
 	Fixes:
 	- require perl 5.10 for '//' operator [cpantesters]
 	- fix tests to use gmtime, not localtime [cpantesters]

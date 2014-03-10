@@ -62,7 +62,7 @@ This module inserts values into (translated) strings.  It provides
 C<printf> and C<sprintf> alternatives via both an object oriented and a
 functional interface.
 
-Read in the L<DETAILS> chapter below, why this module provides a better
+Read in the L</DETAILS> chapter below, why this module provides a better
 alternative for C<printf()>.  Also, some extended B<examples> can be
 found there.  Take a look at them first, when you start using this
 module!
@@ -89,7 +89,7 @@ object has some benefits.
 
 =section Constructors
 
-=c_method new OPTIONS
+=c_method new %options
 
 =option  modifiers ARRAY
 =default modifiers C<[ qr/^%\S+/ => \&format_printf]>
@@ -185,8 +185,8 @@ these functions explicitly, or all together by not specifying the names.
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
 
-=function sprinti FORMAT, PAIRS|HASH
-The FORMAT refers to some string, maybe the result of a translation.
+=function sprinti $format, PAIRS|HASH
+The $format refers to some string, maybe the result of a translation.
 
 The PAIRS (which may be passed as LIST or HASH) contains a mixture of
 special and normal variables to be filled in.  The names of the special
@@ -204,12 +204,12 @@ Which STRING to use when an ARRAY is being filled-in as parameter.
 
 =option  _prepend STRING|OBJECT
 =default _prepend C<undef>
-Text as STRING prepended before FORMAT, without interpolation.  This
+Text as STRING prepended before $format, without interpolation.  This
 may also be an OBJECT which gets stringified, but variables not filled-in.
 
 =option  _append  STRING|OBJECT
 =default _append  C<undef>
-Text as STRING appended after FORMAT, without interpolation.
+Text as STRING appended after $format, without interpolation.
 
 =cut
 
@@ -310,9 +310,9 @@ sub _format_printf($$$$)
     :                   (' ' x $pad) . $s->as_string;
 }
 
-=function printi [FILEHANDLE], FORMAT, PAIRS|HASH
-Calls M<sprinti()> to fill the data in PAIRS or HASH in FORMAT, and
-then sends it to the FILEHANDLE (by default the selected file)
+=function printi [$fh], $format, PAIRS|HASH
+Calls M<sprinti()> to fill the data in PAIRS or HASH in $format, and
+then sends it to the $fh (by default the selected file)
 
   open my $fh, '>', $file;
   printi $fh, ...
@@ -327,9 +327,9 @@ sub printi($$@)
     $fh->print($self->sprinti(@_));
 }
 
-=function printp [FILEHANDLE], FORMAT, PAIRS|HASH
-Calls M<sprintp()> to fill the data in PAIRS or HASH in FORMAT, and
-then sends it to the FILEHANDLE (by default the selected file)
+=function printp [$fh], $format, PAIRS|HASH
+Calls M<sprintp()> to fill the data in PAIRS or HASH in $format, and
+then sends it to the $fh (by default the selected file)
 =cut
 
 sub printp($$@)
@@ -338,14 +338,14 @@ sub printp($$@)
     $fh->print($self->sprintp(@_));
 }
 
-=function sprintp FORMAT, LIST, PAIRS
+=function sprintp $format, LIST, PAIRS
 Where M<sprinti()> uses named parameters --especially useful when the
 strings need translation-- this function stays close to the standard
 C<sprintf()>.  All features of POSIX formats are supported.  This
 should say enough: you can use C<%3$0#5.*d>, if you like.
 
-It may be useful to know that the positional FORMAT is rewritten and
-then fed into M<sprinti()>.  Be careful with the length of the LIST:
+It may be useful to know that the positional $format is rewritten and
+then fed into M<sprinti()>.  B<Be careful> with the length of the LIST:
 superfluous parameter PAIRS are passed along to C<sprinti()>, and
 should only contain "specials".
 
