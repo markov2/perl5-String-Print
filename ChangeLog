@@ -1,6 +1,12 @@
 
 ========== version history of String::Print
 
+version 0.15: Fri Mar 14 09:06:18 CET 2014
+
+	Fixes:
+	- t/11modif.t regression test, where float may get ',' under
+	  some locales [cpantesters]
+
 version 0.14: Mon Mar 10 16:11:30 CET 2014
 
 	Improvements:

@@ -17,8 +17,9 @@ my $pi = 3.14157;
 my $f = String::Print->new;
 isa_ok($f, 'String::Print');
 
-is( $f->sprinti("a={a%d} b={b %.2f}", a => 007, b => $pi)
-  , "a=7 b=3.14" );
+my $x1 = $f->sprinti("a={a%d} b={b %.2f}", a => 007, b => $pi);
+$x1    =~ s/,/./g;  # locale may output floats with comma
+is($x1, "a=7 b=3.14" );
 
 # multi-byte characters
 my $short = "€éö";
