@@ -7,22 +7,31 @@ package String::Print;
 
 use Encode            qw/is_utf8 decode/;
 use Unicode::GCString ();
+use HTML::Entities    qw/encode_entities/;
+use Scalar::Util      qw/blessed reftype/;
 
 my @default_modifiers   = ( qr/%\S+/ => \&_format_printf );
 my %default_serializers =
- ( UNDEF     => sub { 'undef' }
- , ''        => sub { $_[1]   }
- , SCALAR    => sub { ${$_[1]} // shift->{LRF_seri}{UNDEF}->(@_) }
- , ARRAY     =>
+  ( UNDEF     => sub { 'undef' }
+  , ''        => sub { $_[1]   }
+  , SCALAR    => sub { ${$_[1]} // shift->{SP_seri}{UNDEF}->(@_) }
+  , ARRAY     =>
      sub { my $v = $_[1]; my $join = $_[2]{_join} // ', ';
            join $join, map +($_ // 'undef'), @$v;
          }
- , HASH      =>
+  , HASH      =>
      sub { my $v = $_[1];
            join ', ', map "$_ => ".($v->{$_} // 'undef'), sort keys %$v;
          }
  # CODE value has different purpose
  );
+
+my %predefined_encodings =
+(   HTML =>
+      { exclude => [ qr/html$/i ]
+      , encode  => sub { encode_entities $_[0] }
+      }
+);
 
 =encoding utf8
 
@@ -34,30 +43,34 @@ String::Print - printf alternative
 
  ### Functional interface
  use String::Print qw/printi printp/, %config;
-
+ 
  # interpolation of arrays and hashes
  printi 'age {years}', years => 12;
  printi 'price-list: {prices%.2f}', prices => \@prices, _join => "+";
- printi 'dump: {hash}', hash => \%config;
-
+ printi 'dump: {c}', c => \%config;
+ 
+ # [0.90] more complex interpolation names
+ printi 'filename: {c.filename}', c => \%config;
+ printi 'username: {user.name}', user => $user_object;
+ printi 'price: {product.price €}', product => $db->product(3);
+ 
  # same with positional parameters
  printp 'age %d", 12;
  printp 'price-list: %.2f', \@prices;
  printp 'dump: %s', \%settings;
-
+ 
  ### Object Oriented interface
  use String::Print 'oo';      # import nothing 
  my $f = String::Print->new(%config);
-
- # same, called directly
  $f->printi('age {years}', years => 12);
  $f->printp('age %d', 12);
-
+ 
  ### via Log::Report's __* functions
  use Log::Report::Optional;
  print __x"age {years}", years => 12;
 
 =chapter DESCRIPTION
+
 This module inserts values into (translated) strings.  It provides
 C<printf> and C<sprintf> alternatives via both an object oriented and a
 functional interface.
@@ -74,20 +87,20 @@ module!
 See functions M<printi()>, M<sprinti()>, M<printp()>, and M<sprintp()>: you
 can also call them as method.
 
-  use String::Print 'oo';
-  my $f = String::Print->new(%config);
-  $f->printi($format, @params);
-
-  # exactly the same functionality:
-  use String::Print 'printi', %config;
-  printi $format, @params;
+ use String::Print 'oo';
+ my $f = String::Print->new(%config);
+ $f->printi($format, @params);
+ 
+ # exactly the same functionality:
+ use String::Print 'printi', %config;
+ printi $format, @params;
 
 The Object Oriented interface wins when you need the same configuration
 in multiple source files, or when you need different configurations
 within one program.  In these cases, the hassle of explicitly using the
 object has some benefits.
 
-=section Constructors
+=subsection Constructors
 
 =c_method new %options
 
@@ -101,11 +114,18 @@ passed to C<print[ip]> itself.
 =default serializers <useful defaults>
 How to serialize data elements.
 
+=option  encode_for HASH|'HTML'
+=default encode_for undef
+[0.90] The format string and the inserted values will get encoded according to
+some syntax rules.  For instance, C<encode_entities()> of M<HTML::Entities>
+when you specify the predefined string C<HTML>.  See M<encodeFor()>.
+
 =examples
 
   my $f = String::Print->new
     ( modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ]
     , serializers => [ UNDEF => sub {'-'} ]
+    , encode_for  => 'HTML'
     );
 
   $f->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
@@ -116,15 +136,16 @@ sub new(@) { my $class = shift; (bless {}, $class)->init( {@_} ) }
 sub init($)
 {   my ($self, $args) = @_;
 
-    my $modif = $self->{LRF_modif} = [ @default_modifiers ];
+    my $modif = $self->{SP_modif} = [ @default_modifiers ];
     if(my $m  = $args->{modifiers})
     {   unshift @$modif, @$m;
     }
 
     my $s    = $args->{serializers} || {};
-    my $seri = $self->{LRF_seri}
+    my $seri = $self->{SP_seri}
       = { %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
 
+    $self->encodeFor($args->{encode_for});
     $self;
 }
 
@@ -154,7 +175,7 @@ sub import(@)
 }
 
 #-------------
-=section Attributes
+=subsection Attributes
 
 =method addModifiers PAIRS
 The PAIRS are a combination of an selector and a CODE which processes the
@@ -165,7 +186,53 @@ definitions.  You may also specify an ARRAY of modifiers per C<print>.
 See section L</"Interpolation: Modifiers"> about the details.
 =cut
 
-sub addModifiers(@) {my $self = shift; unshift @{$self->{LRF_modif}}, @_}
+sub addModifiers(@) {my $self = shift; unshift @{$self->{SP_modif}}, @_}
+
+
+=method encodeFor HASH|undef|($predefined, %overrule)
+[0.90] Enable/define the output encoding.
+Read section L</"Output encoding"> about the details.
+=cut
+
+sub encodeFor($)
+{   my ($self, $type) = (shift, shift);
+    defined $type
+        or return $self->{SP_enc} = undef;
+
+    my %def;
+    if(ref $type eq 'HASH') {
+        %def = %$type;
+    }
+    else 
+    {   my $def = $predefined_encodings{$type}
+            or die "ERROR: unknown output encoding type $type\n";
+        %def = (%$def, @_);
+    }
+
+    my $excls   = $def{exclude} || [];
+    my $regexes = join '|'
+       , map +(ref $_ eq 'Regexp' ? $_ : qr/(?:^|\.)\Q$_\E$/)
+          , ref $excls eq 'ARRAY' ? @$excls : $excls;
+    $def{SP_exclude} = qr/$regexes/o;
+
+    $self->{SP_enc} = \%def;
+}
+
+# You cannot have functions and methods with the same name in OODoc and POD
+=subsection Printing
+
+The following are provided as method and as function.  You find their
+explanation further down on this page.
+
+$obj->B<printi>([$fh], $format, PAIRS|HASH);
+
+$obj->B<printp>([$fh], $format, PAIRS|HASH);
+
+$obj->B<sprinti>($format, PAIRS|HASH);
+
+$obj->B<sprintp>($format, LIST, PAIRS);
+
+=cut
 
 #-------------------
 =chapter FUNCTIONS
@@ -219,28 +286,86 @@ sub sprinti($@)
 
     $args->{_join} //= ', ';
 
-    my $result = is_utf8($format) ? $format : decode(latin1 => $format);
+    my @frags = split /\{([^}]*)\}/,
+        is_utf8($format) ? $format : decode(latin1 => $format);
 
-    # quite hard to check for a bareword :(
-    $result    =~ s/\{\s* ( [\pL\p{Pc}\pM]\w* )\s*( [^}]*? )\s*\}/
-                    $self->_expand($1,$2,$args)/gxe;
+    my @parts;
 
-    $result    = $args->{_prepend} . $result if defined $args->{_prepend};
-    $result   .= $args->{_append}            if defined $args->{_append};
-    $result;
+    # Code parially duplicated for performance!
+    if(my $enc = $self->{SP_enc})
+    {   my $encode  = $enc->{encode};
+        my $exclude = $enc->{SP_exclude};
+        push @parts, $encode->($args->{_prepend}) if defined $args->{_prepend};
+        push @parts, $encode->(shift @frags);
+        while(@frags) {
+            my ($name, $tricks) = (shift @frags)
+                =~ m!^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$!o or die $format;
+
+	    push @parts, $name =~ $exclude
+              ? $self->_expand($name, $tricks, $args)
+              : $encode->($self->_expand($name, $tricks, $args));
+
+            push @parts, $encode->(shift @frags) if @frags;
+        }
+        push @parts, $encode->($args->{_append}) if defined $args->{_append};
+    }
+    else
+    {   push @parts, $args->{_prepend} if defined $args->{_prepend};
+        push @parts, shift @frags;
+        while(@frags) {
+	    (shift @frags) =~ /^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$/o
+                or die $format;
+	    push @parts, $self->_expand($1, $2, $args);
+            push @parts, shift @frags if @frags;
+        }
+        push @parts, $args->{_append} if defined $args->{_append};
+    }
+
+    join '', @parts;
 }
 
 sub _expand($$$)
 {   my ($self, $key, $modifier, $args) = @_;
-    my $value = $args->{$key};
 
-    $value = $value->($self, $key, $args)
-        while ref $value eq 'CODE';
+    my $value;
+    if(index($key, '.') != -1)
+    {   my @parts = split /\./, $key;
+        $value    = $args->{shift @parts};
+        $value = $value->($self, $key, $args)
+            while ref $value eq 'CODE';
+
+        while(defined $value && @parts)
+        {  if(blessed $value)
+           {   my $method = shift @parts;
+               $value->can($method) or die "object $value cannot $method\n";
+               $value = $value->$method;  # parameters not supported here
+           }
+           elsif(ref $value && reftype $value eq 'HASH')
+           {   $value = $value->{shift @parts};
+           }
+           elsif(index($value, ':') != -1 || $::{$value.'::'})
+           {   my $method = shift @parts;
+               $value->can($method) or die "class $value cannot $method\n";
+               $value = $value->$method;  # parameters not supported here
+           }
+           else
+           {   die "not a HASH, object, or class at $parts[0] in $key\n";
+           }
+
+           $value = $value->($self, $key, $args)
+               while ref $value eq 'CODE';
+        }
+    }
+    else
+    {   $value = $args->{$key};
+        $value = $value->($self, $key, $args)
+            while ref $value eq 'CODE';
+    }
 
     my $mod;
  STACKED:
     while(length $modifier)
-    {   my @modif = @{$self->{LRF_modif}};
+    {   my @modif = @{$self->{SP_modif}};
         while(@modif)
         {   my ($regex, $callback) = (shift @modif, shift @modif);
             $modifier =~ s/^($regex)\s*// or next;
@@ -251,7 +376,7 @@ sub _expand($$$)
         return "{unknown modifier '$modifier'}";
     }
 
-    my $seri = $self->{LRF_seri}{defined $value ? ref $value : 'UNDEF'};
+    my $seri   = $self->{SP_seri}{defined $value ? ref $value : 'UNDEF'};
     $seri ? $seri->($self, $value, $args) : "$value";
 }
 
@@ -437,11 +562,14 @@ as bytes, not Perl strings (which may be utf8).  In unicode, one
 double wide, for instance in Chinese.  The M<printi()> implementation
 will use M<Unicode::GCString> for correct behavior.
 
+=item automatic output encoding (for HTML)
+You can globally declare that all produced strings must be encoded in
+a certain format, for instance that HTML entities should be encoded.o
 =back
 
-=section Three components
+=section Four components
 
-To fill-in a FORMAT, three clearly separated components play a role:
+To fill-in a FORMAT, four clearly separated components play a role:
 
 =over 4
 =item 1. modifiers
@@ -453,25 +581,98 @@ and ARRAYs.
 =item 3. conversion
 The standard UNIX format rules, like C<%d>.  One conversion rule
 has been added 'S', which provides unicode correct behavior.
+=item 4. encoding
+Prepare the output for a certain syntax, like HTML.
 =back
 
 Simplified:
 
   # sprinti() replaces "{$key$modifiers$conversion}" by
-  $conversion->($serializer->($modifiers->($args{$key})))
+  $encode->($format->($serializer->($modifiers->($args{$key}))))
 
   # sprintp() replaces "%pos{$modifiers}$conversion" by
-  $conversion->($serializer->($modifiers->($arg[$pos])))
+  $encode->($format->($serializer->($modifiers->($arg[$pos]))))
 
 Example:
 
   printi "price: {price € %-10s}", price => $cost;
+  printi "price: {price € %-10s}", { price => $cost };
   printp "price: %-10{€}s", $cost;
 
-  $conversion = column width %-10s
-  $serializer = show float as string
-  $modifier   = € to local currency
   $value      = $cost (in €)
+  $modifier   = convert € to local currency £
+  $serializer = show float as string
+  $format     = column width %-10s
+  $encode     = £ into &pound;     # when encodingFor('HTML')
+
+
+=section Interpolation: keys
+
+A key is a bareword (like a variable name) or a list of barewords
+separated by dots (no blanks!)  A simple key directly refers to a
+named parameter of the function or method:
+
+  printi "Username: {name}", name => 'Mark';
+
+You may also pass them as HASH
+
+  printi "Username: {name}", { name => 'Mark' };
+
+Or as CODE:
+
+  printi "Username: {name}", name => sub { 'Mark' };
+
+The smartness of pre-processing CODE is part of serialization.
+
+B<Please> use explanatory key names, to help the translation
+process once you need that (in the future).
+
+
+=subsection Complex keys 
+
+[0.90] In the previous section, we kept our addressing it simple: let's
+change that now.  Two alternatives for the same:
+
+  printi "Username: {name}", name => $user->{name};  # simple key
+  printi "Username: {user.name}", user => $user;     # complex key
+
+You can pass a parameter name as HASH, which contains values.  This may
+even be nested into multiple levels.  You may also pass objects, class
+(package names), and code references.
+
+In above case of C<user.name>, when C<user> is a HASH it will take the
+value which belongs to the key C<name>.  When C<user> is a CODE, it will
+run code to get a value.  When C<user> is an object, the method C<name>
+is called to get a value back.  When C<user> is a class name, the C<name>
+refers to an instance method on that class.
+
+More examples which do work:
+
+ # when name is a column in the database query result
+ printi "Username: {user.name}", user => $db->fetchrow_hashref;
+ 
+ # call a sub which does the database query, returning a HASH
+ printi "Username: {user.name}", user => sub { $db->getUser('mark') };
+ 
+ # using an instance method (object)
+ {  package User;
+    sub new  { bless { myname => $_[1] }, $_[0] }
+    sub name { $_[0]->{myname} }
+ }
+ my $user = User->new('Mark');
+ printi "Username: {user.name}", user => $user;
+
+ # using a class method
+ sub User::count   { 42 }
+ printi "Username: {user.count}", user => 'User';
+ 
+ # mixed, here CODE, HASH, and Object
+ printi "Username: {document.author.name}", document => sub {
+    return +{ author => User->new('Mark') }
+ };
+
+Limitation: you cannot pass arguments to CODE calls.
+
 
 =section Interpolation: Serialization
 
@@ -488,13 +689,13 @@ value which is missing, it will be interpreted as C<undef>.
 
 =over 4
 
+=item strings
+Simple scalar values are interpolated "as is"
+
 =item CODE
 When a value is passed as CODE reference, that function will get called
 to return the value to be filled in.
 For interpolating, the following rules apply:
-
-=item strings
-Simple scalar values are interpolated "as is"
 
 =item SCALAR
 Takes the value where the scalar reference points to.
@@ -632,7 +833,7 @@ tells us which currency to use in the display.
 
 Another example.  Now, we want to add timestamps.  In this case, we
 decide for modifier names in C<\w>, so we need a blank to separate
-the paramter from the modifer.
+the parameter from the modifer.
 
   use POSIX  qw/strftime/;
   use String::Print modifiers => [ qr/T|DT|D/ => \&_timestamp ];
@@ -668,6 +869,83 @@ The modifiers are called in order:
 
   printp "price: %9{€}s\n", $p;       # price: ␣␣␣123.45
   printp ">%10{T}s<", $now;           # >␣␣12:59:17<
+
+
+=section Output encoding
+
+[0.90] This module is used by M<Log::Report>, which can be used (amongst
+many other things) to insert (translated) strings with parameters into
+HTML templates.  You can imagine that some of the parameter may need to
+be encoded to HTML in the template, and other not.
+
+=subsection example with TemplateToolkit
+
+For example in TemplateToolkit, you would write
+
+  # in your TT-template
+  <div>Username: [% username | html %]</div>
+  # in your code:
+  username => $user->name,
+
+With plain String::Print with output encoding enabled, you can do:
+
+  # in your TT-template
+  <div>[% show_username %]</div>
+  # in your code with encodeFor('HTML')
+  show_username => printi("Username: {user}", user => $user->name),
+  # or
+  show_username => printp("Username: %s", $user->name),
+
+That does not look very efficient, however it changes for the good when
+this is combined with L<Log::Report::Lexicon> (translations)  You can
+either do:
+
+  # in your TT-template
+  <div>[% show_username %]</div>
+  # in your code with encodeFor('HTML')
+  show_username => __("Username: {user}", user => $user->name),
+
+Shorter:
+
+  # in your TT-template
+  <div>[% loc("Username: {user}", user => username) %]</div>
+  # in your code with encodeFor('HTML')
+  username => $user->name,
+
+Even shorter:
+
+  # in your TT-template
+  <div>[% loc("Username: {user.name}", user => userobj) %]</div>
+  # in your code with encodeFor('HTML')
+  userobj => $user,
+
+The latter is only a few characters longer than the original example, but
+it gives you localization!  Nearly for free!
+  
+More details in M<Log::Report::Extract::Template>.
+
+
+=subsection Output encoding exclusion
+
+In some cases, the data which is inserted is already encoded in the
+output syntax.  For instance, you already have HTML to be included.
+
+The default exclusion rule for HTML output is C<qr/html$/i>, which
+means that all inserted named parameters, where the name ends on C<html>
+will not get html-entity encoded.
+
+This will work by default:
+
+  # with encodeFor('HTML')
+  printp "Me & Co: {name}, {description_html}",
+     name => 'René', description_html => $descr;
+
+This may result in:
+
+  Me &amp; Co: Ren&eacute;, <font color="red">new member</font>
+
+Better not to have HTML in your program: leave it to the template.  But
+in some cases, you have no choice.
 
 
 =section Compared to other modules on CPAN
