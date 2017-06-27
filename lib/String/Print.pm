@@ -9,8 +9,20 @@ use Encode            qw/is_utf8 decode/;
 use Unicode::GCString ();
 use HTML::Entities    qw/encode_entities/;
 use Scalar::Util      qw/blessed reftype/;
+use POSIX             qw/strftime/;
+use Date::Parse       qw/str2time/;
 
-my @default_modifiers   = ( qr/%\S+/ => \&_format_printf );
+my @default_modifiers   =
+  ( qr/\%\S+/       => \&_modif_format
+  , qr/BYTES\b/     => \&_modif_bytes
+  , qr/YEAR\b/      => \&_modif_year
+  , qr/DT\([^)]*\)/ => \&_modif_dt
+  , qr/DT\b/        => \&_modif_dt
+  , qr/DATE\b/      => \&_modif_date
+  , qr/TIME\b/      => \&_modif_time
+  , qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef
+  );
+
 my %default_serializers =
   ( UNDEF     => sub { 'undef' }
   , ''        => sub { $_[1]   }
@@ -23,8 +35,8 @@ my %default_serializers =
      sub { my $v = $_[1];
            join ', ', map "$_ => ".($v->{$_} // 'undef'), sort keys %$v;
          }
- # CODE value has different purpose
- );
+  # CODE value has different purpose
+  );
 
 my %predefined_encodings =
 (   HTML =>
@@ -41,43 +53,55 @@ String::Print - printf alternative
 
 =chapter SYNOPSIS
 
- ### Functional interface
- use String::Print qw/printi printp/, %config;
+  ### Functional interface
+
+  use String::Print;           # simpelest way
+  use String::Print qw/printi printp/, %config;
+  printi 'age {years}', years => 12;
  
- # interpolation of arrays and hashes
- printi 'age {years}', years => 12;
- printi 'price-list: {prices%.2f}', prices => \@prices, _join => "+";
- printi 'dump: {c}', c => \%config;
+  # interpolation of arrays and hashes (serializers)
+  printi 'price-list: {prices}', prices => \@p, _join => "+";
+  printi 'dump: {c}', c => \%config;
  
- # [0.90] more complex interpolation names
- printi 'filename: {c.filename}', c => \%config;
- printi 'username: {user.name}', user => $user_object;
- printi 'price: {product.price €}', product => $db->product(3);
+  # same with positional parameters
+  printp 'age %d", 12;
+  printp 'price-list: %.2f', \@prices;
+  printp 'dump: %s', \%settings;
  
- # same with positional parameters
- printp 'age %d", 12;
- printp 'price-list: %.2f', \@prices;
- printp 'dump: %s', \%settings;
+  # modifiers
+  printi 'price: {price%.2f}', price => 3.14*VAT*EURO;
+
+  # [0.91] more complex interpolation names
+  printi 'filename: {c.filename}', c => \%config;
+  printi 'username: {user.name}', user => $user_object;
+  printi 'price: {product.price €}', product => $db->product(3);
+
+  ### Object Oriented interface
+
+  use String::Print 'oo';      # import nothing 
+  my $f = String::Print->new(%config);
+  $f->printi('age {years}', years => 12);
+  $f->printp('age %d', 12);
  
- ### Object Oriented interface
- use String::Print 'oo';      # import nothing 
- my $f = String::Print->new(%config);
- $f->printi('age {years}', years => 12);
- $f->printp('age %d', 12);
- 
- ### via Log::Report's __* functions
- use Log::Report::Optional;
- print __x"age {years}", years => 12;
+  ### via Log::Report's __* functions (optional translation)
+
+  use Log::Report;             # or Log::Report::Optional
+  print __x"age {years}", years => 12;
+
+  ### via Log::Report::Template (Template Toolkit extension)
+
+  [% SET name = 'John Doe' %]
+  [% loc("Dear {name},") %]     # includes translation
 
 =chapter DESCRIPTION
 
-This module inserts values into (translated) strings.  It provides
-C<printf> and C<sprintf> alternatives via both an object oriented and a
-functional interface.
+This module inserts values into (format) strings.  It provides C<printf>
+and C<sprintf> alternatives via both an object oriented and a functional
+interface.
 
 Read in the L</DETAILS> chapter below, why this module provides a better
 alternative for C<printf()>.  Also, some extended B<examples> can be
-found there.  Take a look at them first, when you start using this
+found down there.  Take a look at them first, when you start using this
 module!
 
 =chapter METHODS
@@ -87,13 +111,13 @@ module!
 See functions M<printi()>, M<sprinti()>, M<printp()>, and M<sprintp()>: you
 can also call them as method.
 
- use String::Print 'oo';
- my $f = String::Print->new(%config);
- $f->printi($format, @params);
+  use String::Print 'oo';
+  my $f = String::Print->new(%config);
+  $f->printi($format, @params);
  
- # exactly the same functionality:
- use String::Print 'printi', %config;
- printi $format, @params;
+  # exactly the same functionality:
+  use String::Print 'printi', %config;
+  printi $format, @params;
 
 The Object Oriented interface wins when you need the same configuration
 in multiple source files, or when you need different configurations
@@ -116,9 +140,15 @@ How to serialize data elements.
 
 =option  encode_for HASH|'HTML'
 =default encode_for undef
-[0.90] The format string and the inserted values will get encoded according to
+[0.91] The format string and the inserted values will get encoded according to
 some syntax rules.  For instance, C<encode_entities()> of M<HTML::Entities>
 when you specify the predefined string C<HTML>.  See M<encodeFor()>.
+
+=option  missing_key CODE
+=default missing_key <warning>
+[0.91] During interpolation, it may be discovered that a key is missing
+from the parameter list.  In that case, a warning is produced and C<undef>
+inserted.  May can overrule that behavior.
 
 =examples
 
@@ -133,6 +163,7 @@ when you specify the predefined string C<HTML>.  See M<encodeFor()>.
 =cut
 
 sub new(@) { my $class = shift; (bless {}, $class)->init( {@_} ) }
+
 sub init($)
 {   my ($self, $args) = @_;
 
@@ -146,6 +177,7 @@ sub init($)
       = { %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
 
     $self->encodeFor($args->{encode_for});
+	$self->{SP_missing} = $args->{missing_key} || \&_reportMissingKey;
     $self;
 }
 
@@ -190,7 +222,7 @@ sub addModifiers(@) {my $self = shift; unshift @{$self->{SP_modif}}, @_}
 
 
 =method encodeFor HASH|undef|($predefined, %overrule)
-[0.90] Enable/define the output encoding.
+[0.91] Enable/define the output encoding.
 Read section L</"Output encoding"> about the details.
 =cut
 
@@ -252,12 +284,12 @@ these functions explicitly, or all together by not specifying the names.
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
 
-=function sprinti $format, PAIRS|HASH
+=function sprinti $format, PAIRS|HASH|OBJECT
 The $format refers to some string, maybe the result of a translation.
 
-The PAIRS (which may be passed as LIST or HASH) contains a mixture of
-special and normal variables to be filled in.  The names of the special
-variables (the options) start with an underscore (C<_>).
+The PAIRS (which may be passed as LIST, HASH, or blessed HASH) contains
+a mixture of special and normal variables to be filled in.  The names
+of the special variables (the options) start with an underscore (C<_>).
 
 =option  _count INTEGER
 =default _count C<undef>
@@ -283,10 +315,12 @@ Text as STRING appended after $format, without interpolation.
 sub sprinti($@)
 {   my ($self, $format) = (shift, shift);
     my $args = @_==1 ? shift : {@_};
+    # $args may be a blessed HASH, for instance a Log::Report::Message
 
     $args->{_join} //= ', ';
+    local $args->{_format} = $format;
 
-    my @frags = split /\{([^}]*)\}/,
+    my @frags = split /\{([^}]*)\}/,   # enforce unicode
         is_utf8($format) ? $format : decode(latin1 => $format);
 
     my @parts;
@@ -328,9 +362,19 @@ sub _expand($$$)
 {   my ($self, $key, $modifier, $args) = @_;
 
     my $value;
-    if(index($key, '.') != -1)
+    if(index($key, '.')== -1)
+    {   # simple value
+        $value = exists $args->{$key} ? $args->{$key}
+          : $self->_missingKey($key, $args);
+        $value = $value->($self, $key, $args)
+            while ref $value eq 'CODE';
+    }
+    else
     {   my @parts = split /\./, $key;
-        $value    = $args->{shift @parts};
+		my $key   = shift @parts;
+        $value = exists $args->{$key} ? $args->{$key}
+          : $self->_missingKey($key, $args);
+
         $value = $value->($self, $key, $args)
             while ref $value eq 'CODE';
 
@@ -356,14 +400,9 @@ sub _expand($$$)
                while ref $value eq 'CODE';
         }
     }
-    else
-    {   $value = $args->{$key};
-        $value = $value->($self, $key, $args)
-            while ref $value eq 'CODE';
-    }
 
     my $mod;
- STACKED:
+  STACKED:
     while(length $modifier)
     {   my @modif = @{$self->{SP_modif}};
         while(@modif)
@@ -380,13 +419,35 @@ sub _expand($$$)
     $seri ? $seri->($self, $value, $args) : "$value";
 }
 
-# See dedicated section in explanation in DETAILS
-sub _format_printf($$$$)
-{   my ($self, $format, $value, $args) = @_;
+sub _missingKey($$)
+{   my ($self, $key, $args) = @_;
+	$self->{SP_missing}->($self, $key, $args);
+}
 
-    # be careful, often $format doesn't eat strings
-    defined $value
-        or return 'undef';
+sub _reportMissingKey($$)
+{   my ($self, $key, $args) = @_;
+
+    my $depth = 0;
+	my ($filename, $linenr);
+    while((my $pkg, $filename, $linenr) = caller $depth++)
+    {   last unless
+            $pkg->isa(__PACKAGE__)
+         || $pkg->isa('Log::Report::Minimal::Domain');
+    }
+
+	warn $self->sprinti
+      ( "Missing key '{key}' in format '{format}', file {fn} line {line}\n"
+      , key => $key, format => $args->{_format}
+      , fn => $filename, line => $linenr
+      );
+
+    undef;
+}
+
+# See dedicated section in explanation in DETAILS
+sub _modif_format($$$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value && length $value or return undef;
 
     use locale;
     if(ref $value eq 'ARRAY')
@@ -435,6 +496,97 @@ sub _format_printf($$$$)
     :                   (' ' x $pad) . $s->as_string;
 }
 
+# See dedicated section in explanation in DETAILS
+sub _modif_bytes($$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value && length $value or return undef;
+
+	return sprintf("%3d  B", $value) if $value < 1000;
+
+    my @scale = qw/kB MB GB TB PB EB ZB/;
+	$value /= 1024;
+
+	while(@scale > 1 && $value > 999)
+    {   shift @scale;
+        $value /= 1024;
+    }
+
+    return sprintf "%3d $scale[0]", $value + 0.5
+        if $value > 9.949;
+
+	sprintf "%3.1f $scale[0]", $value;
+}
+
+sub _modif_year($$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value && length $value or return undef;
+
+	return $value
+        if $value !~ /\D/ && $value < 2200;
+
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "year not found in '$value'";
+
+    strftime "%Y", localtime($stamp);
+}
+
+sub _modif_date($$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value && length $value or return undef;
+
+	return sprintf("%4d-%02d-%02d", $1, $2, $3)
+        if $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
+        || $value =~ m!^\s*([0-9]{4})([0-9][0-9])([0-9][0-9])\s*$!;
+
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "date not found in '$value'";
+
+    strftime "%F", localtime($stamp);
+}
+
+sub _modif_time($$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value && length $value or return undef;
+
+	return sprintf "%02d:%02d:%02d", $1, $2, $3||0
+        if $value =~ m!^\s*(0?[0-9]|1[0-9]|2[0-3])\:([0-5]?[0-9])(?:\:([0-5]?[0-9]))?\s*$!
+        || $value =~ m!^\s*(0[0-9]|1[0-9]|2[0-3])([0-5][0-9])(?:([0-5][0-9]))?\s*$!;
+
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "time not found in '$value'";
+
+    strftime "%T", localtime($stamp);
+}
+
+my %dt_format =
+  ( ASC     => '%a %b %e %T %Y'
+  , ISO     => '%FT%T%z'
+  , RFC2822 => '%a, %d %b %Y %T %z'
+  , RFC822  => '%a, %d %b %y %T %z'
+  , FT      => '%F %T'
+  );
+
+sub _modif_dt($$$)
+{   my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
+
+	my $kind    = ($format =~ m/DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
+	my $pattern = $dt_format{$kind}
+        or return "dt format $kind not known";
+
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "dt not found in '$value'";
+
+    strftime $pattern, localtime($stamp);
+}
+
+
+sub _modif_undef($$$)
+{   my ($self, $format, $value, $args) = @_;
+    return $value if defined $value && length $value;
+    $format =~ m!//"([^"]*)"|//'([^']*)'|//(\w*)! ? $+ : undef;
+}
+
 =function printi [$fh], $format, PAIRS|HASH
 Calls M<sprinti()> to fill the data in PAIRS or HASH in $format, and
 then sends it to the $fh (by default the selected file)
@@ -451,6 +603,7 @@ sub printi($$@)
     my $fh   = ref $_[0] eq 'GLOB' ? shift : select;
     $fh->print($self->sprinti(@_));
 }
+
 
 =function printp [$fh], $format, PAIRS|HASH
 Calls M<sprintp()> to fill the data in PAIRS or HASH in $format, and
@@ -472,7 +625,7 @@ should say enough: you can use C<%3$0#5.*d>, if you like.
 It may be useful to know that the positional $format is rewritten and
 then fed into M<sprinti()>.  B<Be careful> with the length of the LIST:
 superfluous parameter PAIRS are passed along to C<sprinti()>, and
-should only contain "specials".
+should only contain "specials": parameter names which start with '_'.
 
 =example of the rewrite
 
@@ -480,9 +633,9 @@ should only contain "specials".
   my $x = sprintp "dumpfiles: %s\n", \@dumpfiles
      , _join => ':';
 
-  # is rewriten into, and then processed as
-  my $x = sprinti "dumpfiles: {filenames}\n"
-     , filenames => \@dumpfiles, _join => ':';
+  # is rewritten into, and then processed as
+  my $x = sprinti "dumpfiles: {_1}\n"
+     , _1 => \@dumpfiles, _join => ':';
 
 =cut
 
@@ -564,7 +717,8 @@ will use M<Unicode::GCString> for correct behavior.
 
 =item automatic output encoding (for HTML)
 You can globally declare that all produced strings must be encoded in
-a certain format, for instance that HTML entities should be encoded.o
+a certain format, for instance that HTML entities should be encoded.
+
 =back
 
 =section Four components
@@ -595,6 +749,8 @@ Simplified:
 
 Example:
 
+  #XXX Your manual-page reader may not support the unicode used
+  #XXX in the examples below.
   printi "price: {price € %-10s}", price => $cost;
   printi "price: {price € %-10s}", { price => $cost };
   printp "price: %-10{€}s", $cost;
@@ -609,32 +765,40 @@ Example:
 =section Interpolation: keys
 
 A key is a bareword (like a variable name) or a list of barewords
-separated by dots (no blanks!)  A simple key directly refers to a
-named parameter of the function or method:
-
-  printi "Username: {name}", name => 'Mark';
-
-You may also pass them as HASH
-
-  printi "Username: {name}", { name => 'Mark' };
-
-Or as CODE:
-
-  printi "Username: {name}", name => sub { 'Mark' };
-
-The smartness of pre-processing CODE is part of serialization.
+separated by dots (no blanks!)
 
 B<Please> use explanatory key names, to help the translation
 process once you need that (in the future).
 
 
+=subsection Simple keys
+
+A simple key directly refers to a named parameter of the function or method:
+
+  printi "Username: {name}", name => 'John';
+
+You may also pass them as HASH or CODE:
+
+  printi "Username: {name}", { name => 'John' };
+  printi "Username: {name}", name => sub { 'John' };
+  printi "Username: {name}", { name => sub { 'John' } };
+  printi "Username: {name}", name => sub { sub {'John'} };
+
+The smartness of pre-processing CODE is part of serialization.
+
+
 =subsection Complex keys 
 
-[0.90] In the previous section, we kept our addressing it simple: let's
+[0.91] In the previous section, we kept our addressing it simple: let's
 change that now.  Two alternatives for the same:
 
-  printi "Username: {name}", name => $user->{name};  # simple key
-  printi "Username: {user.name}", user => $user;     # complex key
+  my $user = { name => 'John' };
+  printi "Username: {name}", name => $user->{name}; # simple key
+  printi "Username: {user.name}", user => $user;    # complex key
+
+The way these complex keys work, is close to the flexibility of
+template toolkit: the only thing you cannot do, is passing parameters
+to called CODE.
 
 You can pass a parameter name as HASH, which contains values.  This may
 even be nested into multiple levels.  You may also pass objects, class
@@ -648,28 +812,31 @@ refers to an instance method on that class.
 
 More examples which do work:
 
- # when name is a column in the database query result
- printi "Username: {user.name}", user => $db->fetchrow_hashref;
+  # when name is a column in the database query result
+  printi "Username: {user.name}", user => $sth->fetchrow_hashref;
  
- # call a sub which does the database query, returning a HASH
- printi "Username: {user.name}", user => sub { $db->getUser('mark') };
- 
- # using an instance method (object)
- {  package User;
+  # call a sub which does the database query, returning a HASH
+  printi "Username: {user.name}", user => sub { $db->getUser('John') };
+
+  # using an instance method (object)
+  { package User;
     sub new  { bless { myname => $_[1] }, $_[0] }
     sub name { $_[0]->{myname} }
- }
- my $user = User->new('Mark');
- printi "Username: {user.name}", user => $user;
+  }
+  my $user = User->new('John');
+  printi "Username: {user.name}", user => $user;
 
- # using a class method
- sub User::count   { 42 }
- printi "Username: {user.count}", user => 'User';
- 
- # mixed, here CODE, HASH, and Object
- printi "Username: {document.author.name}", document => sub {
-    return +{ author => User->new('Mark') }
- };
+  # using a class method
+  sub User::count   { 42 }
+  printi "Username: {user.count}", user => 'User';
+
+  # nesting, mixing
+  printi "Complain to {product.factory.address}", product => $p;
+
+  # mixed, here CODE, HASH, and Object
+  printi "Username: {document.author.name}", document => sub {
+    return +{ author => User->new('John') }
+  };
 
 Limitation: you cannot pass arguments to CODE calls.
 
@@ -733,50 +900,63 @@ objects get stringified.
 =section Interpolation: Modifiers
 
 Modifiers are used to change the value to be inserted, before the characters
-get interpolated in the line.
+get interpolated in the line.  This is a powerful simplification.  Let's
+discuss this with an example.
 
-=subsection Modifiers: unix format
+In traditional (gnu) gettext, you would write:
 
-Next to the name, you can specify a format code.  With (gnu) C<gettext()>,
-you often see this:
+  printf(gettext("approx pi: %.6f\n"), PI);
 
- printf gettext("approx pi: %.6f\n"), PI;
+to get PI printed with six digits in the fragment.
+M<Locale::TextDomain> has two ways to achieve that:
 
-M<Locale::TextDomain> has two ways:
-
- printf __"approx pi: %.6f\n", PI;
- print __x"approx pi: {approx}\n", approx => sprintf("%.6f", PI);
+  printf __"approx pi: %.6f\n", PI;
+  print __x"approx pi: {approx}\n", approx => sprintf("%.6f", PI);
 
 The first does not respect the wish to be able to reorder the arguments
 during translation (although there are ways to work around that)  The
-second version is quite long.  The content of the translation table
-differs between the examples.
+second version is quite long.  The string to be translated differs
+between the two examples.
 
-With C<Log::Report>, above syntaxes do work, but you can also do:
+With C<Log::Report>, above syntaxes do work as well, but you can also do:
 
- # with optional translations
- print __x"approx pi: {pi%.6f}\n", pi => PI;
+  # with optional translations
+  print __x"approx pi: {pi%.6f}\n", pi => PI;
 
 The base for C<__x()> is the M<printi()> provided by this module. Internally,
-it will call C<printi> to fill in parameters:
+it will call C<printi> to fill-in parameters:
 
- printi   "approx pi: {pi%.6f}\n", pi => PI;
+  printi "approx pi: {pi%.6f}\n", pi => PI;
 
 Another example:
 
- printi "{perms} {links%2d} {user%-8s} {size%10d} {fn}\n"
-   , perms => '-rw-r--r--', links => 7, user => 'me'
-   , size => 12345, fn => $filename;
+  printi "{perms} {links%2d} {user%-8s} {size%10d} {fn}\n",
+     perms => '-rw-r--r--', links => 7, user => 'me',
+     size => 12345, fn => $filename;
 
-An additional advantage is the fact that not all languages produce
-comparable length strings.  Now, the translators can take care that
-the layout of tables is optimal.  Above example in M<printp()> syntax,
-shorter but less maintainable:
+An additional advantage (when you use translation) is the fact that not
+all languages produce comparable length strings.  Now, the translators
+can change the format, such that the layout of tables is optimal for their
+language.
 
- printp "%s %2d %-8s 10d %s\n"
-   , '-rw-r--r--', 7, 'me', 12345, $filename;
+Above example in M<printp()> syntax, shorter but less maintainable:
 
-=subsection Modifiers: unix format improvements
+  printp "%s %2d %-8s 10d %s\n",
+     '-rw-r--r--', 7, 'me', 12345, $filename;
+
+
+=section Interpolation: default modifiers
+
+=subsection Default modifier: POSIX format
+
+As shown in the examples above, you can specify a format.  This can,
+for instance, help you with rounding or columns:
+
+  printp "π = {pi%.3f}", pi => 3.1415;
+  printp "weight is {kilogram%d}", kilogram => 127*OUNCE_PER_KILO;
+  printp "{filename%-20.20s}\n", filename => $fn;
+
+=subsubsection - improvements on POSIX format
 
 The POSIX C<printf()> does not handle unicode strings.  Perl does
 understand that the 's' modifier may need to insert utf8 so does not
@@ -790,7 +970,96 @@ Chinese characters have width 2.  When printing in fixed-width, this
 'S' is probably the better choice over 's'.  When the field does not
 specify its width, then there is no performance penalty for using 'S'.
 
-=subsection Modifiers: private modifiers
+  # name right aligned, commas on same position, always
+  printp "name: {name%20S},\n", name => $some_chinese;
+
+
+=subsection Default modifier: BYTES
+
+[0.91] Too often, you have to translate a (file) size into humanly readible
+format.  The C<BYTES> modifier simplifies this a lot:
+
+  printp "{size BYTES} {fn}\n", fn => $fn, size => -s $fn;
+
+The output will always be 6 characters.  Examples are "999  B", "1.2 kB",
+and " 27 MB".
+
+=subsection Default modifiers: YEAR, DATE, TIME, DT, and DT()
+
+[0.91] A set of modifiers help displaying dates and times.  They are a
+little flexible in values they accept, but do not expect miracles: when
+it get harder, you will need to process it yourself.
+
+The actual treatment of a time value depends on the value: three
+different situations:
+
+=over 4
+
+=item 1. numeric
+
+A pure numeric value is considered "seconds since epoch", unless it
+is smaller than 21000000, in which case it is taken as date without
+separators.
+
+=item 2. date format without time-zone
+
+The same formats are understood as in the next option, but without
+time-zone information.  The date is processed as text as if in the
+local time zone, and the output in the local time-zone.
+
+=item 3. date format with time-zone
+
+By far not all possible date formats are supported, just a few common
+versions, like
+
+  2017-06-27 10:04:15 +02:00
+  2017-06-27 17:34:28.571491+02  # psql timestamp with zone
+  20170627100415+2
+  2017-06-27T10:04:15Z           # iso 8601
+  20170627                       # only for YEAR and DATE
+  2017-6-1                       # only for YEAR and DATE
+  12:34                          # only for TIME
+
+The meaning of 05-04-2017 is unclear, so not supported.  Milliseconds
+get ignored.
+
+When the provided value has a timezone indication, it will get
+converted into the local timezone of the observer.
+
+=back
+
+The output of C<YEAR> is in format 'YYYY', for C<DATE> it will always be
+'YYYY-MM-DD', where C<TIME> produces 'HH:mm:ss'.
+
+The short form C<DT> is an alias for C<DT(FT)>.  The DT modifier can
+produce different formats:
+
+  DT(ASC)     : %a %b %e %T %Y       asctime output
+  DT(FT)      : %F %T                YYYY-MM-DD HH:mm:ss
+  DT(ISO)     : %FT%T%z              iso8601
+  DT(RFC822)  : %a, %d %b %y %T %z   email old
+  DT(RFC2822) : %a, %d %b %Y %T %z   email newer
+
+You may suggest additional formats, or add your own modifier.
+
+=subsection Default modifiers: //word, //"string", //'string'
+
+[0.91] By default, an undefined value is shown as text 'undef'.  Empty
+strings are shown as nothing.  This may not be nice.  You may want to
+be more specific when a value is missing.
+
+   "visitors: {count //0}"
+   "published: {date DT//'not yet'}"
+   "copyright: {year//2017 YEAR}
+
+Modifiers will usually return C<undef> when they are called with an
+undefined or empty value.  By the right order of '//', you may product
+different kinds of output:
+
+   "price: {price//5 EUR}"
+   "price: {price EUR//unknown}"
+
+=subsection Private modifiers
 
 You may pass your own modifiers.  A modifier consists of a selector and
 a CODE, which is called when the selector matches.  The selector is either
@@ -835,27 +1104,6 @@ Another example.  Now, we want to add timestamps.  In this case, we
 decide for modifier names in C<\w>, so we need a blank to separate
 the parameter from the modifer.
 
-  use POSIX  qw/strftime/;
-  use String::Print modifiers => [ qr/T|DT|D/ => \&_timestamp ];
-
-  sub _timestamp($$$$)
-    { my ($formatter, $modif, $value, $args) = @_;
-      my $time_format
-        = $modif eq 'T'  ? '%T'
-        : $modif eq 'D'  ? '%F'
-        : $modif eq 'DT' ? '%FT%TZ'
-        :                  'ERROR';
-      strftime $time_format, gmtime($value);
-    };
-
-  printi "time: {t T}",  t => $now;  # time: 10:59:17
-  printi "date: {t D }", t => $now;  # date: 2013-04-13
-  printi "both: {t DT}", t => $now;  # both: 2013-04-13T10:59:17Z
-
-  printp "time: %{T}s",  $now;       # time: 10:59:17
-  printp "date: %{D}s",  $now;       # date: 2013-04-13
-  printp "both: %{DT}s", $now;       # both: 2013-04-13T10:59:17Z
-
 =subsection Modifiers: stacking
 
 You can add more than one modifier.  The modifiers detect the extend of
@@ -873,18 +1121,18 @@ The modifiers are called in order:
 
 =section Output encoding
 
-[0.90] This module is used by M<Log::Report>, which can be used (amongst
-many other things) to insert (translated) strings with parameters into
-HTML templates.  You can imagine that some of the parameter may need to
-be encoded to HTML in the template, and other not.
+[0.91] This module is also used by M<Log::Report::Template>, which is used
+to insert (translated) strings with parameters into HTML templates.
+You can imagine that some of the parameter may need to be encoded to
+HTML in the template, and other not.
 
-=subsection example with TemplateToolkit
+=subsection example with Log::Report::Template
 
-For example in TemplateToolkit, you would write
+In pure Template Toolkit, you would write
 
   # in your TT-template
   <div>Username: [% username | html %]</div>
-  # in your code:
+  # in your code
   username => $user->name,
 
 With plain String::Print with output encoding enabled, you can do:
@@ -903,26 +1151,31 @@ either do:
   # in your TT-template
   <div>[% show_username %]</div>
   # in your code with encodeFor('HTML')
-  show_username => __("Username: {user}", user => $user->name),
+  show_username => __x("Username: {user}", user => $user->name),
 
 Shorter:
 
-  # in your TT-template
+  # in your TT-template with encodeFor('HTML')
   <div>[% loc("Username: {user}", user => username) %]</div>
-  # in your code with encodeFor('HTML')
+  # in your code
   username => $user->name,
 
 Even shorter:
 
-  # in your TT-template
+  # in your TT-template with encodeFor('HTML')
   <div>[% loc("Username: {user.name}", user => userobj) %]</div>
-  # in your code with encodeFor('HTML')
+  # in your code
   userobj => $user,
 
-The latter is only a few characters longer than the original example, but
-it gives you localization!  Nearly for free!
-  
-More details in M<Log::Report::Extract::Template>.
+Shortest:
+
+  # in your TT-template with encodeFor('HTML')
+  <div>[% loc("Username: {user.name}") %]</div>
+  # in your code
+  user => $user,
+
+Shorter that the original, and translations for free!
+More examples in M<Log::Report::Template>.
 
 
 =subsection Output encoding exclusion
