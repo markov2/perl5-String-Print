@@ -517,6 +517,15 @@ sub _modif_bytes($$$)
 	sprintf "%3.1f $scale[0]", $value;
 }
 
+# Be warned: %F and %T (from C99) are not supported on Windows
+my %dt_format =
+  ( ASC     => '%a %b %e %H:%M:%S %Y'
+  , ISO     => '%Y-%m-%dT%H:%M:%S%z'
+  , RFC2822 => '%a, %d %b %Y %H:%M:%S %z'
+  , RFC822  => '%a, %d %b %y %H:%M:%S %z'
+  , FT      => '%Y-%m-%d %H:%M:%S'
+  );
+
 sub _modif_year($$$)
 {   my ($self, $format, $value, $args) = @_;
     defined $value && length $value or return undef;
@@ -541,7 +550,7 @@ sub _modif_date($$$)
 	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
 	defined $stamp or return "date not found in '$value'";
 
-    strftime "%F", localtime($stamp);
+    strftime "%Y-%m-%d", localtime($stamp);
 }
 
 sub _modif_time($$$)
@@ -555,16 +564,8 @@ sub _modif_time($$$)
 	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
 	defined $stamp or return "time not found in '$value'";
 
-    strftime "%T", localtime($stamp);
+    strftime "%H:%M:%S", localtime($stamp);
 }
-
-my %dt_format =
-  ( ASC     => '%a %b %e %T %Y'
-  , ISO     => '%FT%T%z'
-  , RFC2822 => '%a, %d %b %Y %T %z'
-  , RFC822  => '%a, %d %b %y %T %z'
-  , FT      => '%F %T'
-  );
 
 sub _modif_dt($$$)
 {   my ($self, $format, $value, $args) = @_;
