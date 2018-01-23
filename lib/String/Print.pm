@@ -1,7 +1,11 @@
-use warnings;
-use strict;
+# This code is part of distribution String-Print.  Meta-POD processed with
+# OODoc into POD and HTML manual-pages.  See README.md
+# Copyright Mark Overmeer.  Licensed under the same terms as Perl itself.
 
 package String::Print;
+
+use warnings;
+use strict;
 
 #use Log::Report::Optional 'log-report';
 
@@ -1223,6 +1227,7 @@ provided per explicit function call.  Only C<String::Print> cleanly
 separates the roles of serializers, modifiers, and conversions.
 
 C<String::Print> is nicely integrated with M<Log::Report>.
+
 =cut
 
 1;
