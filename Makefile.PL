@@ -29,9 +29,9 @@ WriteMakefile
              , url  => 'https://github.com/markov2/perl5-String-Print.git'
              , web  => 'https://github.com/markov2/perl5-String-Print'
              }
+           , license  => [ 'http://dev.perl.org/licenses/' ]
          }
       , homepage => 'http://perl.overmeer.net/CPAN/'
-      , license  => [ 'http://dev.perl.org/licenses/' ]
       }
   );
 
