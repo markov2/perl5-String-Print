@@ -535,7 +535,7 @@ sub _modif_year($$$)
     defined $value && length $value or return undef;
 
     return $1
-        if $value =~ /^\s*([0-9]+)\s*$/ && $1 < 2200;
+        if $value =~ /^\s*([0-9]{4})\s*$/ && $1 < 2200;
 
     my $stamp = $value =~ /^\s*([0-9]+)\s*$/ ? $1 : str2time($value);
     defined $stamp or return "year not found in '$value'";
