@@ -19,6 +19,7 @@ use Date::Parse       qw/str2time/;
 my @default_modifiers   =
   ( qr/\%\S+/       => \&_modif_format
   , qr/BYTES\b/     => \&_modif_bytes
+  , qr/HTML\b/      => \&_modif_html
   , qr/YEAR\b/      => \&_modif_year
   , qr/DT\([^)]*\)/ => \&_modif_dt
   , qr/DT\b/        => \&_modif_dt
@@ -223,7 +224,6 @@ See section L</"Interpolation: Modifiers"> about the details.
 =cut
 
 sub addModifiers(@) {my $self = shift; unshift @{$self->{SP_modif}}, @_}
-
 
 =method encodeFor HASH|undef|($predefined, %overrule)
 [0.91] Enable/define the output encoding.
@@ -521,6 +521,11 @@ sub _modif_bytes($$$)
     sprintf "%3.1f $scale[0]", $value;
 }
 
+sub _modif_html($$$)
+{   my ($self, $format, $value, $args) = @_;
+    defined $value ? (encode_entities $value) : undef;
+}
+
 # Be warned: %F and %T (from C99) are not supported on Windows
 my %dt_format =
   ( ASC     => '%a %b %e %H:%M:%S %Y'
@@ -584,7 +589,6 @@ sub _modif_dt($$$)
 
     strftime $pattern, localtime($stamp);
 }
-
 
 sub _modif_undef($$$)
 {   my ($self, $format, $value, $args) = @_;
@@ -988,6 +992,10 @@ format.  The C<BYTES> modifier simplifies this a lot:
 
 The output will always be 6 characters.  Examples are "999  B", "1.2 kB",
 and " 27 MB".
+
+=subsection Default modifier: HTML
+
+[0.95] interpolate the parameter with HTML entity encoding.
 
 =subsection Default modifiers: YEAR, DATE, TIME, DT, and DT()
 

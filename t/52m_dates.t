@@ -15,7 +15,7 @@ isa_ok($f, 'String::Print');
 sub fill($$)
 {   my ($expected, $count) = @_;
     my $show = $f->sprinti("{a BYTES}", a => $count);
-	$show =~ s/\,/./g;  # depends on effective locale
+    $show =~ s/\,/./g;  # depends on effective locale
 
     is $show, $expected, $expected;
 }
@@ -25,7 +25,6 @@ sub fill($$)
 my $devel = $ENV{MARKOV_DEVEL} || 0;
 
 my $now = 1498224823;
-
 
 is $f->sprinti("{t YEAR}", t => '2017'),       '2017', 'year';
 is $f->sprinti("{t YEAR}", t => '2017-06-23'), '2017', 'year';
