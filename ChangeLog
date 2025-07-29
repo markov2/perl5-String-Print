@@ -8,6 +8,7 @@ version 0.95:
 
 	Improvements:
 	- modifier HTML
+	- add .gitignore
 
 version 0.94: Sun  1 Mar 12:37:41 CET 2020
 
