@@ -17,4 +17,5 @@ t/50m_format.t
 t/51m_bytes.t
 t/52m_dates.t
 t/53m_default.t
+t/54m_html.t
 xt/99pod.t

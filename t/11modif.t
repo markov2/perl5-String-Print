@@ -29,6 +29,4 @@ is $g->sprinti("b={p₤}", p => $pi), "b=2.55 PND";
 
 is $g->sprinti("a={p€%10s}", p => $pi), "a=  3.14 EUR", 'stacking modifiers';
 
-is $g->sprinti("Hello &amp; greetz {name HTML}", name => "André"), 'Hello &amp; greetz Andr&eacute;', 'html modifier';
-
 done_testing;
