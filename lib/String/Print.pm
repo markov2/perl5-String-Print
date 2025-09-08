@@ -285,12 +285,12 @@ these functions explicitly, or all together by not specifying the names.
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
 
-=function sprinti $format, %data|\%data|OBJECT
+=function sprinti $format, %data|\%data|OBJECT, %options
 The $format refers to some string, maybe the result of a translation.
 
 The %data (which may be passed as LIST, HASH, or blessed HASH) contains
 a mixture of special and normal variables to be filled in.  The names
-of the special variables (the options) start with an underscore (C<_>).
+of the special variables (the %options) start with an underscore (C<_>).
 
 =option  _count INTEGER
 =default _count undef
@@ -602,8 +602,8 @@ sub printi($$@)
 }
 
 
-=function printp [$fh], $format, %options
-Calls M<sprintp()> to fill the %data in $format, and
+=function printp [$fh], $format, @params, %options
+Calls M<sprintp()> to fill the @params in $format, and
 then sends it to the $fh (by default the selected file)
 =cut
 

@@ -4,10 +4,10 @@
 All modifications where created by Mark Overmeer, unless explicitly
 stated differently.
 
-version 0.95:
+version 0.95: Mon  8 Sep 14:06:53 CEST 2025
 
 	Fixes:
-	- printp strings which start with a '%'
+	- printp formats which start with a '%' were not processed
 
 	Improvements:
 	- modifier HTML
