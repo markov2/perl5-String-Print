@@ -1,6 +1,7 @@
-# This code is part of distribution String-Print.  Meta-POD processed with
-# OODoc into POD and HTML manual-pages.  See README.md
-# Copyright Mark Overmeer.  Licensed under the same terms as Perl itself.
+#oodist: *** DO NOT USE THIS VERSION FOR PRODUCTION ***
+#oodist: This file contains OODoc-style documentation which will get stripped
+#oodist: during its release in the distribution.  You can use this file for
+#oodist: testing, however the code of this development version may be broken!
 
 package String::Print;
 
@@ -9,45 +10,39 @@ use strict;
 
 #use Log::Report::Optional 'log-report';
 
-use Encode            qw/is_utf8 decode/;
 use Unicode::GCString ();
-use HTML::Entities    qw/encode_entities/;
-use Scalar::Util      qw/blessed reftype/;
-use POSIX             qw/strftime/;
 use Date::Parse       qw/str2time/;
+use Encode            qw/is_utf8 decode/;
+use HTML::Entities    qw/encode_entities/;
+use POSIX             qw/strftime/;
+use Scalar::Util      qw/blessed reftype/;
 
-my @default_modifiers   =
-  ( qr/\%\S+/       => \&_modif_format
-  , qr/BYTES\b/     => \&_modif_bytes
-  , qr/HTML\b/      => \&_modif_html
-  , qr/YEAR\b/      => \&_modif_year
-  , qr/DT\([^)]*\)/ => \&_modif_dt
-  , qr/DT\b/        => \&_modif_dt
-  , qr/DATE\b/      => \&_modif_date
-  , qr/TIME\b/      => \&_modif_time
-  , qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef
-  );
+my @default_modifiers   = (
+	qr/\%\S+/       => \&_modif_format,
+	qr/BYTES\b/     => \&_modif_bytes,
+	qr/HTML\b/      => \&_modif_html,
+	qr/YEAR\b/      => \&_modif_year,
+	qr/DT\([^)]*\)/ => \&_modif_dt,
+	qr/DT\b/        => \&_modif_dt,
+	qr/DATE\b/      => \&_modif_date,
+	qr/TIME\b/      => \&_modif_time,
+	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
+);
 
-my %default_serializers =
-  ( UNDEF     => sub { 'undef' }
-  , ''        => sub { $_[1]   }
-  , SCALAR    => sub { ${$_[1]} // shift->{SP_seri}{UNDEF}->(@_) }
-  , ARRAY     =>
-     sub { my $v = $_[1]; my $join = $_[2]{_join} // ', ';
-           join $join, map +($_ // 'undef'), @$v;
-         }
-  , HASH      =>
-     sub { my $v = $_[1];
-           join ', ', map "$_ => ".($v->{$_} // 'undef'), sort keys %$v;
-         }
-  # CODE value has different purpose
-  );
+my %default_serializers = (
+	UNDEF     => sub { 'undef' },
+	''        => sub { $_[1]   },
+	SCALAR    => sub { ${$_[1]} // shift->{SP_seri}{UNDEF}->(@_) },
+	ARRAY     => sub { my $v = $_[1]; my $join = $_[2]{_join} // ', '; join $join, map +($_ // 'undef'), @$v },
+	HASH      => sub { my $v = $_[1]; join ', ', map "$_ => ".($v->{$_} // 'undef'), sort keys %$v },
+	# CODE value has different purpose
+);
 
 my %predefined_encodings = (
-    HTML => {
-        exclude => [ qr/html$/i ],
-        encode  => sub { encode_entities $_[0] },
-    },
+	HTML => {
+		exclude => [ qr/html$/i ],
+		encode  => sub { encode_entities $_[0] },
+	},
 );
 
 =encoding utf8
@@ -63,16 +58,16 @@ String::Print - printf alternative
   use String::Print;           # simpelest way
   use String::Print qw/printi printp/, %config;
   printi 'age {years}', years => 12;
- 
+
   # interpolation of arrays and hashes (serializers)
   printi 'price-list: {prices}', prices => \@p, _join => "+";
   printi 'dump: {c}', c => \%config;
- 
+
   # same with positional parameters
   printp 'age %d", 12;
   printp 'price-list: %.2f', \@prices;
   printp 'dump: %s', \%settings;
- 
+
   # modifiers
   printi 'price: {price%.2f}', price => 3.14*VAT*EURO;
 
@@ -83,11 +78,11 @@ String::Print - printf alternative
 
   ### Object Oriented interface
 
-  use String::Print 'oo';      # import nothing 
+  use String::Print 'oo';      # import nothing
   my $f = String::Print->new(%config);
   $f->printi('age {years}', years => 12);
   $f->printp('age %d', 12);
- 
+
   ### via Log::Report's __* functions (optional translation)
 
   use Log::Report;             # or Log::Report::Optional
@@ -100,8 +95,8 @@ String::Print - printf alternative
 
 =chapter DESCRIPTION
 
-This module inserts values into (format) strings.  It provides C<printf>
-and C<sprintf> alternatives via both an object oriented and a functional
+This module inserts values into (format) strings.  It provides C<printf()>
+and C<sprintf()> alternatives via both an object oriented and a functional
 interface.
 
 Read in the L</DETAILS> chapter below, why this module provides a better
@@ -119,7 +114,7 @@ can also call them as method.
   use String::Print 'oo';
   my $f = String::Print->new(%config);
   $f->printi($format, @params);
- 
+
   # exactly the same functionality:
   use String::Print 'printi', %config;
   printi $format, @params;
@@ -147,13 +142,13 @@ How to serialize data elements.
 =option  encode_for HASH|'HTML'
 =default encode_for undef
 [0.91] The format string and the inserted values will get encoded according to
-some syntax rules.  For instance, C<encode_entities()> of M<HTML::Entities>
-when you specify the predefined string C<HTML>.  See M<encodeFor()>.
+some syntax rules.  Function C<encode_entities()> provided by HTML::Entities
+is used when you specify the predefined string C<HTML>.  See M<encodeFor()>.
 
 =option  missing_key CODE
 =default missing_key <warning>
 [0.91] During interpolation, it may be discovered that a key is missing
-from the parameter list.  In that case, a warning is produced and C<undef>
+from the parameter list.  In that case, a warning is produced and undef
 inserted.  May can overrule that behavior.
 
 =examples
@@ -164,55 +159,55 @@ inserted.  May can overrule that behavior.
     encode_for  => 'HTML',
   );
 
-  $f->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
+  $f->printi("price: {p EUR}", p => 3.1415); # price: XX3.14 e (X=blank)
   $f->printi("count: {c}", c => undef);      # count: -
 =cut
 
 sub new(@) { my $class = shift; (bless {}, $class)->init( {@_} ) }
 
 sub init($)
-{   my ($self, $args) = @_;
+{	my ($self, $args) = @_;
 
-    my $modif = $self->{SP_modif} = [ @default_modifiers ];
-    if(my $m  = $args->{modifiers})
-    {   unshift @$modif, @$m;
-    }
+	my $modif = $self->{SP_modif} = [ @default_modifiers ];
+	if(my $m  = $args->{modifiers})
+	{	unshift @$modif, @$m;
+	}
 
-    my $s    = $args->{serializers} || {};
-    my $seri = $self->{SP_seri} = { %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
+	my $s    = $args->{serializers} || {};
+	my $seri = $self->{SP_seri} = +{ %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
 
-    $self->encodeFor($args->{encode_for});
-    $self->{SP_missing} = $args->{missing_key} || \&_reportMissingKey;
-    $self;
+	$self->encodeFor($args->{encode_for});
+	$self->{SP_missing} = $args->{missing_key} || \&_reportMissingKey;
+	$self;
 }
 
 sub import(@)
-{   my $class = shift;
-    my ($oo, %func);
-    while(@_)
-    {   last if $_[0] !~ m/^s?print[ip]$/;
-        $func{shift()} = 1;
-    }
+{	my $class = shift;
+	my ($oo, %func);
+	while(@_)
+	{	last if $_[0] !~ m/^s?print[ip]$/;
+		$func{shift()} = 1;
+	}
 
-    if(@_ && $_[0] eq 'oo')
-    {   # import only object oriented interface
-        shift @_;
-        @_ and die "no options allowed at import with oo interface";
-        return;
-    }
+	if(@_ && $_[0] eq 'oo')
+	{	# import only object oriented interface
+		shift @_;
+		@_ and die "no options allowed at import with oo interface";
+		return;
+	}
 
-    my $all   = !keys %func;
-    my $f     = $class->new(@_);   # OO encapsulated
-    my ($pkg) = caller;
-    no strict 'refs';
-    *{"$pkg\::printi"}  = sub { $f->printi(@_)  } if $all || $func{printi};
-    *{"$pkg\::sprinti"} = sub { $f->sprinti(@_) } if $all || $func{sprinti};
-    *{"$pkg\::printp"}  = sub { $f->printp(@_)  } if $all || $func{printp};
-    *{"$pkg\::sprintp"} = sub { $f->sprintp(@_) } if $all || $func{sprintp};
-    $class;
+	my $all   = !keys %func;
+	my $f     = $class->new(@_);   # OO encapsulated
+	my ($pkg) = caller;
+	no strict 'refs';
+	*{"$pkg\::printi"}  = sub { $f->printi(@_)  } if $all || $func{printi};
+	*{"$pkg\::sprinti"} = sub { $f->sprinti(@_) } if $all || $func{sprinti};
+	*{"$pkg\::printp"}  = sub { $f->printp(@_)  } if $all || $func{printp};
+	*{"$pkg\::sprintp"} = sub { $f->sprintp(@_) } if $all || $func{sprintp};
+	$class;
 }
 
-#-------------
+#--------------------
 =subsection Attributes
 
 =method addModifiers PAIRS
@@ -233,48 +228,46 @@ Read section L</"Output encoding"> about the details.
 =cut
 
 sub encodeFor($)
-{   my ($self, $type) = (shift, shift);
-    defined $type
-        or return $self->{SP_enc} = undef;
+{	my ($self, $type) = (shift, shift);
+	defined $type
+		or return $self->{SP_enc} = undef;
 
-    my %def;
-    if(ref $type eq 'HASH')
-    {   %def = %$type;
-    }
-    else 
-    {   my $def = $predefined_encodings{$type}
-            or die "ERROR: unknown output encoding type $type\n";
-        %def = (%$def, @_);
-    }
+	my %def;
+	if(ref $type eq 'HASH')
+	{	%def = %$type;
+	}
+	else
+	{	my $def = $predefined_encodings{$type}
+			or die "ERROR: unknown output encoding type $type\n";
+		%def = (%$def, @_);
+	}
 
-    my $excls   = $def{exclude} || [];
-    my $regexes = join '|'
-       , map +(ref $_ eq 'Regexp' ? $_ : qr/(?:^|\.)\Q$_\E$/)
-          , ref $excls eq 'ARRAY' ? @$excls : $excls;
-    $def{SP_exclude} = qr/$regexes/o;
+	my $excls   = $def{exclude} || [];
+	my $regexes = join '|',
+		map +(ref $_ eq 'Regexp' ? $_ : qr/(?:^|\.)\Q$_\E$/),
+			ref $excls eq 'ARRAY' ? @$excls : $excls;
+	$def{SP_exclude} = qr/$regexes/o;
 
-    $self->{SP_enc} = \%def;
+	$self->{SP_enc} = \%def;
 }
 
 #XXX
 # OODoc does not like it when we have methods and functions with the same name.
 
+#--------------------
 =subsection Printing
 
 The following are provided as method and as function.  You find their
 explanation further down on this page.
 
-$obj->B<printi>([$fh], $format, PAIRS|HASH);
-
-$obj->B<printp>([$fh], $format, PAIRS|HASH);
-
-$obj->B<sprinti>($format, PAIRS|HASH);
-
-$obj->B<sprintp>($format, LIST, PAIRS);
+  $obj->printi([$fh], $format, %data|\%data);
+  $obj->printp([$fh], $format, @params, %options);
+  my $s = $obj->sprinti($format, %data|\%data);
+  my $s = $obj->sprintp($format, @params, %options);
 
 =cut
 
-#-------------------
+#--------------------
 =chapter FUNCTIONS
 
 The functional interface creates a hidden object.  You may import any of
@@ -285,22 +278,22 @@ these functions explicitly, or all together by not specifying the names.
   use String::Print;           # all
   use String::Print 'sprinti'; # only sprinti
 
-  use String::Print 'printi'   # only printi
-    , modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ]
-    , serializers => [ UNDEF => sub {'-'} ];
+  use String::Print 'printi',   # only printi
+    modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ],
+    serializers => [ UNDEF => sub {'-'} ];
 
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
 
-=function sprinti $format, PAIRS|HASH|OBJECT
+=function sprinti $format, %data|\%data|OBJECT
 The $format refers to some string, maybe the result of a translation.
 
-The PAIRS (which may be passed as LIST, HASH, or blessed HASH) contains
+The %data (which may be passed as LIST, HASH, or blessed HASH) contains
 a mixture of special and normal variables to be filled in.  The names
 of the special variables (the options) start with an underscore (C<_>).
 
 =option  _count INTEGER
-=default _count C<undef>
+=default _count undef
 Result of the translation process: when M<Log::Report::__xn()> is
 are used for count-sensitive translation.  Those function may add
 more specials to the parameter list.
@@ -310,288 +303,285 @@ more specials to the parameter list.
 Which STRING to use when an ARRAY is being filled-in as parameter.
 
 =option  _prepend STRING|OBJECT
-=default _prepend C<undef>
+=default _prepend undef
 Text as STRING prepended before $format, without interpolation.  This
 may also be an OBJECT which gets stringified, but variables not filled-in.
 
 =option  _append  STRING|OBJECT
-=default _append  C<undef>
+=default _append  undef
 Text as STRING appended after $format, without interpolation.
 
 =cut
 
 sub sprinti($@)
-{   my ($self, $format) = (shift, shift);
-    my $args = @_==1 ? shift : {@_};
-    # $args may be a blessed HASH, for instance a Log::Report::Message
+{	my ($self, $format) = (shift, shift);
+	my $args = @_==1 ? shift : +{ @_ };
+	# $args may be a blessed HASH, for instance a Log::Report::Message
 
-    $args->{_join} //= ', ';
-    local $args->{_format} = $format;
+	$args->{_join} //= ', ';
+	local $args->{_format} = $format;
 
-    my @frags = split /\{([^}]*)\}/,   # enforce unicode
-        is_utf8($format) ? $format : decode(latin1 => $format);
+	my @frags = split /\{([^}]*)\}/,   # enforce unicode
+		is_utf8($format) ? $format : decode(latin1 => $format);
 
-    my @parts;
+	my @parts;
 
-    # Code parially duplicated for performance!
-    if(my $enc = $self->{SP_enc})
-    {   my $encode  = $enc->{encode};
-        my $exclude = $enc->{SP_exclude};
-        push @parts, $encode->($args->{_prepend}) if defined $args->{_prepend};
-        push @parts, $encode->(shift @frags);
-        while(@frags) {
-            my ($name, $tricks) =
-                (shift @frags) =~ m!^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$!o or die $format;
+	# Code parially duplicated for performance!
+	if(my $enc = $self->{SP_enc})
+	{	my $encode  = $enc->{encode};
+		my $exclude = $enc->{SP_exclude};
+		push @parts, $encode->($args->{_prepend}) if defined $args->{_prepend};
+		push @parts, $encode->(shift @frags);
+		while(@frags) {
+			my ($name, $tricks) = (shift @frags) =~ m!^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$!o or die $format;
 
-            push @parts, $name =~ $exclude
-              ? $self->_expand($name, $tricks, $args)
-              : $encode->($self->_expand($name, $tricks, $args));
+			push @parts, $name =~ $exclude
+			  ? $self->_expand($name, $tricks, $args)
+			  : $encode->($self->_expand($name, $tricks, $args));
 
-            push @parts, $encode->(shift @frags) if @frags;
-        }
-        push @parts, $encode->($args->{_append}) if defined $args->{_append};
-    }
-    else
-    {   push @parts, $args->{_prepend} if defined $args->{_prepend};
-        push @parts, shift @frags;
-        while(@frags) {
-            (shift @frags) =~ /^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$/o
-                or die $format;
-            push @parts, $self->_expand($1, $2, $args);
-            push @parts, shift @frags if @frags;
-        }
-        push @parts, $args->{_append} if defined $args->{_append};
-    }
+			push @parts, $encode->(shift @frags) if @frags;
+		}
+		push @parts, $encode->($args->{_append}) if defined $args->{_append};
+	}
+	else
+	{	push @parts, $args->{_prepend} if defined $args->{_prepend};
+		push @parts, shift @frags;
+		while(@frags) {
+			(shift @frags) =~ /^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$/o or die $format;
+			push @parts, $self->_expand($1, $2, $args);
+			push @parts, shift @frags if @frags;
+		}
+		push @parts, $args->{_append} if defined $args->{_append};
+	}
 
-    join '', @parts;
+	join '', @parts;
 }
 
 sub _expand($$$)
-{   my ($self, $key, $modifier, $args) = @_;
+{	my ($self, $key, $modifier, $args) = @_;
 
-    my $value;
-    if(index($key, '.')== -1)
-    {   # simple value
-        $value = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
-        $value = $value->($self, $key, $args)
-            while ref $value eq 'CODE';
-    }
-    else
-    {   my @parts = split /\./, $key;
-        my $key   = shift @parts;
-        $value    = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
+	my $value;
+	if(index($key, '.')== -1)
+	{	# simple value
+		$value = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
+		$value = $value->($self, $key, $args)
+			while ref $value eq 'CODE';
+	}
+	else
+	{	my @parts = split /\./, $key;
+		my $key   = shift @parts;
+		$value    = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
 
-        $value = $value->($self, $key, $args)
-            while ref $value eq 'CODE';
+		$value = $value->($self, $key, $args)
+			while ref $value eq 'CODE';
 
-        while(defined $value && @parts)
-        {  if(blessed $value)
-           {   my $method = shift @parts;
-               $value->can($method) or die "object $value cannot $method\n";
-               $value = $value->$method;  # parameters not supported here
-           }
-           elsif(ref $value && reftype $value eq 'HASH')
-           {   $value = $value->{shift @parts};
-           }
-           elsif(index($value, ':') != -1 || $::{$value.'::'})
-           {   my $method = shift @parts;
-               $value->can($method) or die "class $value cannot $method\n";
-               $value = $value->$method;  # parameters not supported here
-           }
-           else
-           {   die "not a HASH, object, or class at $parts[0] in $key\n";
-           }
+		while(defined $value && @parts)
+		{	if(blessed $value)
+			{	my $method = shift @parts;
+				$value->can($method) or die "object $value cannot $method\n";
+				$value = $value->$method;  # parameters not supported here
+			}
+			elsif(ref $value && reftype $value eq 'HASH')
+			{	$value = $value->{shift @parts};
+			}
+			elsif(index($value, ':') != -1 || $::{$value.'::'})
+			{	my $method = shift @parts;
+				$value->can($method) or die "class $value cannot $method\n";
+				$value = $value->$method;  # parameters not supported here
+			}
+			else
+			{	die "not a HASH, object, or class at $parts[0] in $key\n";
+			}
 
-           $value = $value->($self, $key, $args)
-               while ref $value eq 'CODE';
-        }
-    }
+			$value = $value->($self, $key, $args)
+				while ref $value eq 'CODE';
+		}
+	}
 
-    my $mod;
+	my $mod;
   STACKED:
-    while(length $modifier)
-    {   my @modif = @{$self->{SP_modif}};
-        while(@modif)
-        {   my ($regex, $callback) = (shift @modif, shift @modif);
-            $modifier =~ s/^($regex)\s*// or next;
+	while(length $modifier)
+	{	my @modif = @{$self->{SP_modif}};
+		while(@modif)
+		{	my ($regex, $callback) = (shift @modif, shift @modif);
+			$modifier =~ s/^($regex)\s*// or next;
 
-            $value = $callback->($self, $1, $value, $args);
-            next STACKED;
-        }
-        return "{unknown modifier '$modifier'}";
-    }
+			$value = $callback->($self, $1, $value, $args);
+			next STACKED;
+		}
+		return "{unknown modifier '$modifier'}";
+	}
 
-    my $seri = $self->{SP_seri}{defined $value ? ref $value : 'UNDEF'};
-    $seri ? $seri->($self, $value, $args) : "$value";
+	my $seri = $self->{SP_seri}{defined $value ? ref $value : 'UNDEF'};
+	$seri ? $seri->($self, $value, $args) : "$value";
 }
 
 sub _missingKey($$)
-{   my ($self, $key, $args) = @_;
-    $self->{SP_missing}->($self, $key, $args);
+{	my ($self, $key, $args) = @_;
+	$self->{SP_missing}->($self, $key, $args);
 }
 
 sub _reportMissingKey($$)
-{   my ($self, $key, $args) = @_;
+{	my ($self, $key, $args) = @_;
 
-    my $depth = 0;
-    my ($filename, $linenr);
-    while((my $pkg, $filename, $linenr) = caller $depth++)
-    {   last unless $pkg->isa(__PACKAGE__) || $pkg->isa('Log::Report::Minimal::Domain');
-    }
+	my $depth = 0;
+	my ($filename, $linenr);
+	while((my $pkg, $filename, $linenr) = caller $depth++)
+	{	last unless $pkg->isa(__PACKAGE__) || $pkg->isa('Log::Report::Minimal::Domain');
+	}
 
-    warn $self->sprinti
-      ( "Missing key '{key}' in format '{format}', file {fn} line {line}\n"
-      , key => $key, format => $args->{_format}
-      , fn => $filename, line => $linenr
-      );
+	warn $self->sprinti(
+		"Missing key '{key}' in format '{format}', file {fn} line {line}\n",
+		key => $key, format => $args->{_format}, fn => $filename, line => $linenr
+	);
 
-    undef;
+	undef;
 }
 
 # See dedicated section in explanation in DETAILS
 sub _modif_format($$$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    use locale;
-    if(ref $value eq 'ARRAY')
-    {   @$value or return '(none)';
-        return [ map $self->_format_print($format, $_, $args), @$value ];
-    }
-    elsif(ref $value eq 'HASH')
-    {   keys %$value or return '(none)';
-        return { map +($_ => $self->_format_print($format, $value->{$_}, $args)), keys %$value } ;
-    }
+	use locale;
+	if(ref $value eq 'ARRAY')
+	{	@$value or return '(none)';
+		return +[ map $self->_format_print($format, $_, $args), @$value ];
+	}
+	elsif(ref $value eq 'HASH')
+	{	keys %$value or return '(none)';
+		return +{ map +($_ => $self->_format_print($format, $value->{$_}, $args)), keys %$value } ;
+	}
 
-    $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
-        or return sprintf $format, $value;   # simple: not a string
+	$format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
+		or return sprintf $format, $value;   # simple: not a string
 
-    my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
+	my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
 
-    # String formats like %10s or %-3.5s count characters, not width.
-    # String formats like %10S or %-3.5S are subject to column width.
-    # The latter means: minimal 3 chars, max 5, padding right with blanks.
-    # All inserted strings are upgraded into utf8.
+	# String formats like %10s or %-3.5s count characters, not width.
+	# String formats like %10S or %-3.5S are subject to column width.
+	# The latter means: minimal 3 chars, max 5, padding right with blanks.
+	# All inserted strings are upgraded into utf8.
 
-    my $s = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
+	my $s = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
 
-    my $pad;
-    if($u eq 'S')
-    {   # too large to fit
-        return $value if !$max && $width && $width <= $s->columns;
+	my $pad;
+	if($u eq 'S')
+	{	# too large to fit
+		return $value if !$max && $width && $width <= $s->columns;
 
-        # wider than max.  Waiting for $s->trim($max) if $max, see
-        # https://rt.cpan.org/Public/Bug/Display.html?id=84549
-        $s->substr(-1, 1, '')
-            while $max && $s->columns > $max;
+		# wider than max.  Waiting for $s->trim($max) if $max, see
+		# https://rt.cpan.org/Public/Bug/Display.html?id=84549
+		$s->substr(-1, 1, '')
+			while $max && $s->columns > $max;
 
-        $pad = $width ? $width - $s->columns : 0;
-    }
-    else  # $u eq 's'
-    {   return $value if !$max && $width && $width <= length $s;
-        $s->substr($max, length($s)-$max, '') if $max && length $s > $max;
-        $pad = $width ? $width - length $s : 0;
-    }
+		$pad = $width ? $width - $s->columns : 0;
+	}
+	else  # $u eq 's'
+	{	return $value if !$max && $width && $width <= length $s;
+		$s->substr($max, length($s)-$max, '') if $max && length $s > $max;
+		$pad = $width ? $width - length $s : 0;
+	}
 
-      $pad==0         ? $s->as_string
-    : $padding eq '-' ? $s->as_string . (' ' x $pad)
-    :                   (' ' x $pad) . $s->as_string;
+	  $pad==0         ? $s->as_string
+	: $padding eq '-' ? $s->as_string . (' ' x $pad)
+	:                   (' ' x $pad) . $s->as_string;
 }
 
 # See dedicated section in explanation in DETAILS
 sub _modif_bytes($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    return sprintf("%3d  B", $value) if $value < 1000;
+	return sprintf("%3d  B", $value) if $value < 1000;
 
-    my @scale = qw/kB MB GB TB PB EB ZB/;
-    $value /= 1024;
+	my @scale = qw/kB MB GB TB PB EB ZB/;
+	$value /= 1024;
 
-    while(@scale > 1 && $value > 999)
-    {   shift @scale;
-        $value /= 1024;
-    }
+	while(@scale > 1 && $value > 999)
+	{	shift @scale;
+		$value /= 1024;
+	}
 
-    return sprintf "%3d $scale[0]", $value + 0.5
-        if $value > 9.949;
+	return sprintf "%3d $scale[0]", $value + 0.5
+		if $value > 9.949;
 
-    sprintf "%3.1f $scale[0]", $value;
+	sprintf "%3.1f $scale[0]", $value;
 }
 
 sub _modif_html($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value ? (encode_entities $value) : undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value ? (encode_entities $value) : undef;
 }
 
 # Be warned: %F and %T (from C99) are not supported on Windows
-my %dt_format =
-  ( ASC     => '%a %b %e %H:%M:%S %Y'
-  , ISO     => '%Y-%m-%dT%H:%M:%S%z'
-  , RFC2822 => '%a, %d %b %Y %H:%M:%S %z'
-  , RFC822  => '%a, %d %b %y %H:%M:%S %z'
-  , FT      => '%Y-%m-%d %H:%M:%S'
-  );
+my %dt_format = (
+	ASC     => '%a %b %e %H:%M:%S %Y',
+	ISO     => '%Y-%m-%dT%H:%M:%S%z',
+	RFC2822 => '%a, %d %b %Y %H:%M:%S %z',
+	RFC822  => '%a, %d %b %y %H:%M:%S %z',
+	FT      => '%Y-%m-%d %H:%M:%S',
+);
 
 sub _modif_year($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    return $1
-        if $value =~ /^\s*([0-9]{4})\s*$/ && $1 < 2200;
+	return $1
+		if $value =~ /^\s*([0-9]{4})\s*$/ && $1 < 2200;
 
-    my $stamp = $value =~ /^\s*([0-9]+)\s*$/ ? $1 : str2time($value);
-    defined $stamp or return "year not found in '$value'";
+	my $stamp = $value =~ /^\s*([0-9]+)\s*$/ ? $1 : str2time($value);
+	defined $stamp or return "year not found in '$value'";
 
-    strftime "%Y", localtime($stamp);
+	strftime "%Y", localtime($stamp);
 }
 
 sub _modif_date($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    return sprintf("%4d-%02d-%02d", $1, $2, $3)
-        if $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
-        || $value =~ m!^\s*([0-9]{4})([0-9][0-9])([0-9][0-9])\s*$!;
+	return sprintf("%4d-%02d-%02d", $1, $2, $3)
+		if $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
+		|| $value =~ m!^\s*([0-9]{4})([0-9][0-9])([0-9][0-9])\s*$!;
 
-    my $stamp = $value =~ /\D/ ? str2time($value) : $value;
-    defined $stamp or return "date not found in '$value'";
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "date not found in '$value'";
 
-    strftime "%Y-%m-%d", localtime($stamp);
+	strftime "%Y-%m-%d", localtime($stamp);
 }
 
 sub _modif_time($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    return sprintf "%02d:%02d:%02d", $1, $2, $3||0
-        if $value =~ m!^\s*(0?[0-9]|1[0-9]|2[0-3])\:([0-5]?[0-9])(?:\:([0-5]?[0-9]))?\s*$!
-        || $value =~ m!^\s*(0[0-9]|1[0-9]|2[0-3])([0-5][0-9])(?:([0-5][0-9]))?\s*$!;
+	return sprintf "%02d:%02d:%02d", $1, $2, $3||0
+		if $value =~ m!^\s*(0?[0-9]|1[0-9]|2[0-3])\:([0-5]?[0-9])(?:\:([0-5]?[0-9]))?\s*$!
+		|| $value =~ m!^\s*(0[0-9]|1[0-9]|2[0-3])([0-5][0-9])(?:([0-5][0-9]))?\s*$!;
 
-    my $stamp = $value =~ /\D/ ? str2time($value) : $value;
-    defined $stamp or return "time not found in '$value'";
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "time not found in '$value'";
 
-    strftime "%H:%M:%S", localtime($stamp);
+	strftime "%H:%M:%S", localtime($stamp);
 }
 
 sub _modif_dt($$$)
-{   my ($self, $format, $value, $args) = @_;
-    defined $value && length $value or return undef;
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
 
-    my $kind    = ($format =~ m/DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
-    my $pattern = $dt_format{$kind}
-        or return "dt format $kind not known";
+	my $kind    = ($format =~ m/DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
+	my $pattern = $dt_format{$kind}
+		or return "dt format $kind not known";
 
-    my $stamp = $value =~ /\D/ ? str2time($value) : $value;
-    defined $stamp or return "dt not found in '$value'";
+	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+	defined $stamp or return "dt not found in '$value'";
 
-    strftime $pattern, localtime($stamp);
+	strftime $pattern, localtime($stamp);
 }
 
 sub _modif_undef($$$)
-{   my ($self, $format, $value, $args) = @_;
-    return $value if defined $value && length $value;
-    $format =~ m!//"([^"]*)"|//'([^']*)'|//(\w*)! ? $+ : undef;
+{	my ($self, $format, $value, $args) = @_;
+	return $value if defined $value && length $value;
+	$format =~ m!//"([^"]*)"|//'([^']*)'|//(\w*)! ? $+ : undef;
 }
 
 =function printi [$fh], $format, %data|\%data
@@ -606,24 +596,24 @@ then sends it to the $fh (by default the selected file)
 =cut
 
 sub printi($$@)
-{   my $self = shift;
-    my $fh   = ref $_[0] eq 'GLOB' ? shift : select;
-    $fh->print($self->sprinti(@_));
+{	my $self = shift;
+	my $fh   = ref $_[0] eq 'GLOB' ? shift : select;
+	$fh->print($self->sprinti(@_));
 }
 
 
-=function printp [$fh], $format, %data|\%data
+=function printp [$fh], $format, %options
 Calls M<sprintp()> to fill the %data in $format, and
 then sends it to the $fh (by default the selected file)
 =cut
 
 sub printp($$@)
-{   my $self = shift;
-    my $fh   = ref $_[0] eq 'GLOB' ? shift : select;
-    $fh->print($self->sprintp(@_));
+{	my $self = shift;
+	my $fh   = ref $_[0] eq 'GLOB' ? shift : select;
+	$fh->print($self->sprintp(@_));
 }
 
-=function sprintp $format, @positionals, %data
+=function sprintp $format, @positionals, %options
 Where M<sprinti()> uses named parameters --especially useful when the
 strings need translation-- this function stays close to the standard
 C<sprintf()>.  All features of POSIX formats are supported.  This
@@ -631,7 +621,7 @@ should say enough: you can use C<< %3$0#5.*d >>, if you like.
 
 It may be useful to know that the positional $format is rewritten and
 then fed into M<sprinti()>.  B<Be careful> with the length of the @positionals:
-superfluous parameter %data are passed along to C<sprinti()>, and
+superfluous parameter %options are passed along to C<sprinti()>, and
 should only contain "specials": parameter names which start with '_'.
 
 =example of the rewrite
@@ -645,49 +635,53 @@ should only contain "specials": parameter names which start with '_'.
 =cut
 
 sub _printp_rewrite($)
-{   my @params = @{$_[0]};
-    my $printp = $params[0];
-    my ($printi, @iparam);
-    my ($pos, $maxpos) = (1, 1);
-    while(length $printp && $printp =~ s/^([^%]+)//s)
-    {   $printi .= $1;
-        length $printp or last;
-        if($printp =~ s/^\%\%//)
-        {   $printi .= '%';
-            next;
-        }
-        $printp =~ s/\%(?:([0-9]+)\$)?     # 1=positional
-                       ([-+0 \#]*)         # 2=flags
-                       ([0-9]*|\*)?        # 3=width
-                       (?:\.([0-9]*|\*))?  # 4=precission
-                       (?:\{ ([^}]*) \})?  # 5=modifiers
-                       (\w)                # 6=conversion
-                    //x
-            or die "format error at '$printp' in '$params[0]'";
+{	my @params = @{$_[0]};
+	my $printp = $params[0];
+	my ($printi, @iparam);
+	my ($pos, $maxpos) = (1, 1);
 
-        $pos      = $1 if $1;
-        my $width = !defined $3 ? '' : $3 eq '*' ? $params[$pos++] : $3;
-        my $prec  = !defined $4 ? '' : $4 eq '*' ? $params[$pos++] : $4;
-        my $modif = !defined $5 ? '' : $5;
-        my $valpos= $pos++;
-        $maxpos   = $pos if $pos > $maxpos;
-        push @iparam, "_$valpos" => $params[$valpos];
-        my $format= '%'.$2.($width || '').($prec ? ".$prec" : '').$6;
-        $format   = '' if $format eq '%s';
-        my $sep   = $modif.$format =~ m/^\w/ ? ' ' : '';
-        $printi  .= "{_$valpos$sep$modif$format}";
-    }
-    splice @params, 0, $maxpos, @iparam;
-    ($printi, \@params);
+	while(length $printp)
+	{	$printp  =~ s/^([^%]*)//s;  # take printables
+		$printi .= $1;
+		length $printp or last;
+
+		if($printp =~ s/^\%\%//)    # %% means real %
+		{	$printi .= '%';
+			next;
+		}
+
+		$printp =~ s/\%(?:([0-9]+)\$)?      # 1=positional
+						([-+0 \#]*)         # 2=flags
+						([0-9]*|\*)?        # 3=width
+						(?:\.([0-9]*|\*))?  # 4=precission
+						(?:\{ ([^}]*) \})?  # 5=modifiers
+						(\w)                # 6=conversion
+					//x
+			or die "format error at '$printp' in '$params[0]'";
+
+		$pos       = $1 if $1;
+		my $width  = !defined $3 ? '' : $3 eq '*' ? $params[$pos++] : $3;
+		my $prec   = !defined $4 ? '' : $4 eq '*' ? $params[$pos++] : $4;
+		my $modif  = !defined $5 ? '' : $5;
+		my $valpos = $pos++;
+		$maxpos    = $pos if $pos > $maxpos;
+		push @iparam, "_$valpos" => $params[$valpos];
+		my $format = '%'.$2.($width || '').($prec ? ".$prec" : '').$6;
+		$format    = '' if $format eq '%s';
+		my $sep    = $modif.$format =~ m/^\w/ ? ' ' : '';
+		$printi   .= "{_$valpos$sep$modif$format}";
+	}
+	splice @params, 0, $maxpos, @iparam;
+	($printi, \@params);
 }
 
 sub sprintp(@)
-{   my $self = shift;
-    my ($i, $iparam) = _printp_rewrite \@_;
-    $self->sprinti($i, {@$iparam});
+{	my $self = shift;
+	my ($i, $iparam) = _printp_rewrite \@_;
+	$self->sprinti($i, +{@$iparam});
 }
 
-#-------------------
+#--------------------
 =chapter DETAILS
 
 =section Why use C<printi()>, not C<printf()>?
@@ -707,7 +701,7 @@ M<printp()>
 
 =item pluggable serializers
 C<printi()> supports serialization for specific data-types: how to
-interpolate C<undef>, HASHes, etc.
+interpolate undef, HASHes, etc.
 
 =item pluggable modifiers
 Especially useful in context of translations, the FORMAT string may
@@ -718,7 +712,7 @@ Sized string formatting in C<printf()> is broken: it takes your string
 as bytes, not Perl strings (which may be utf8).  In unicode, one
 "character" may use many bytes.  Also, some characters are displayed
 double wide, for instance in Chinese.  The M<printi()> implementation
-will use M<Unicode::GCString> for correct behavior.
+will use Unicode::GCString for correct behavior.
 
 =item automatic output encoding (for HTML)
 You can globally declare that all produced strings must be encoded in
@@ -735,7 +729,7 @@ To fill-in a FORMAT, four clearly separated components play a role:
 How to change the provided values, for instance to hide locale
 differences.
 =item 2. serializer
-How to represent (the modified) the values correctly, for instance C<undef>
+How to represent (the modified) the values correctly, for instance undef
 and ARRAYs.
 =item 3. conversion
 The standard UNIX format rules, like C<%d>.  One conversion rule
@@ -792,7 +786,7 @@ You may also pass them as HASH or CODE:
 The smartness of pre-processing CODE is part of serialization.
 
 
-=subsection Complex keys 
+=subsection Complex keys
 
 [0.91] In the previous section, we kept our addressing it simple: let's
 change that now.  Two alternatives for the same:
@@ -819,7 +813,7 @@ More examples which do work:
 
   # when name is a column in the database query result
   printi "Username: {user.name}", user => $sth->fetchrow_hashref;
- 
+
   # call a sub which does the database query, returning a HASH
   printi "Username: {user.name}", user => sub { $db->getUser('John') };
 
@@ -857,7 +851,7 @@ you are allowed to interpolate OPTION values in your strings.
 
 There is no way of checking beforehand whether you have provided all
 values to be interpolated in the translated string.  When you refer to
-value which is missing, it will be interpreted as C<undef>.
+value which is missing, it will be interpreted as undef.
 
 =over 4
 
@@ -882,7 +876,7 @@ via the C<_join> OPTION.
 =item HASH
 By default, HASHes are interpolated with sorted keys,
 
-   $key => $value, $key2 => $value2, ...
+  $key => $value, $key2 => $value2, ...
 
 There is no quoting on the keys or values (yet).  Usually, this will
 produce an ugly result anyway.
@@ -913,7 +907,7 @@ In traditional (gnu) gettext, you would write:
   printf(gettext("approx pi: %.6f\n"), PI);
 
 to get PI printed with six digits in the fragment.
-M<Locale::TextDomain> has two ways to achieve that:
+Locale::TextDomain has two ways to achieve that:
 
   printf __"approx pi: %.6f\n", PI;
   print __x"approx pi: {approx}\n", approx => sprintf("%.6f", PI);
@@ -966,7 +960,7 @@ for instance, help you with rounding or columns:
 The POSIX C<printf()> does not handle unicode strings.  Perl does
 understand that the 's' modifier may need to insert utf8 so does not
 count bytes but characters.  M<printi()> does not use characters but
-"grapheme clusters" via M<Unicode::GCString>.  Now, also composed
+"grapheme clusters" via Unicode::GCString.  Now, also composed
 characters do work correctly.
 
 Additionally, you can use the B<new 'S' conversion> to count in columns.
@@ -1057,16 +1051,16 @@ You may suggest additional formats, or add your own modifier.
 strings are shown as nothing.  This may not be nice.  You may want to
 be more specific when a value is missing.
 
-   "visitors: {count //0}"
-   "published: {date DT//'not yet'}"
-   "copyright: {year//2017 YEAR}
+  "visitors: {count //0}"
+  "published: {date DT//'not yet'}"
+  "copyright: {year//2017 YEAR}
 
-Modifiers will usually return C<undef> when they are called with an
+Modifiers will usually return undef when they are called with an
 undefined or empty value.  By the right order of '//', you may product
 different kinds of output:
 
-   "price: {price//5 EUR}"
-   "price: {price EUR//unknown}"
+  "price: {price//5 EUR}"
+  "price: {price EUR//unknown}"
 
 =subsection Private modifiers
 
@@ -1130,7 +1124,7 @@ The modifiers are called in order:
 
 =section Output encoding
 
-[0.91] This module is also used by M<Log::Report::Template>, which is used
+[0.91] This module is also used by Log::Report::Template, which is used
 to insert (translated) strings with parameters into HTML templates.
 You can imagine that some of the parameter may need to be encoded to
 HTML in the template, and other not.
@@ -1184,7 +1178,7 @@ Shortest:
   user => $user,
 
 Shorter that the original, and translations for free!
-More examples in M<Log::Report::Template>.
+More examples in Log::Report::Template.
 
 =subsection Output encoding exclusion
 
@@ -1213,14 +1207,14 @@ in some cases, you have no choice.
 
 There are a quite a number of modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
-L<String::Format|http://search.cpan.org/~darren/String-Format>,
-L<String::Errf|http://search.cpan.org/~rjbs/String-Errf>,
-L<String::Formatter|http://search.cpan.org/~rjbs/String-Formatter>,
-L<Text::Sprintf::Named|http://search.cpan.org/~shlomif/Text-Sprintf-Named>,
-L<Acme::StringFormat|http://search.cpan.org/~gfuji/Acme-StringFormat>,
-L<Text::sprintf|http://search.cpan.org/~sharyanto/Text-sprintfn>,
-L<Log::Sprintf|http://search.cpan.org/~frew/Log-Sprintf>, and
-L<String::Sprintf|http://search.cpan.org/~bartl/String-Sprintf>.
+L<String::Format|https://metacpan.org/dist/String-Format>,
+L<String::Errf|https://metacpan.org/dist/String-Errf>,
+L<String::Formatter|https://metacpan.org/dist/String-Formatter>,
+L<Text::Sprintf::Named|https://metacpan.org/dist/Text-Sprintf-Named>,
+L<Acme::StringFormat|https://metacpan.org/dist/Acme-StringFormat>,
+L<Text::sprintf|https://metacpan.org/dist/Text-sprintfn>,
+L<Log::Sprintf|https://metacpan.org/dist/Log-Sprintf>, and
+L<String::Sprintf|https://metacpan.org/dist/String-Sprintf>.
 They are all slightly different.
 
 When the C<String::Print> module was created, none of the modules
@@ -1229,7 +1223,7 @@ of serializers and modifiers is also usually not possible, sometimes
 provided per explicit function call.  Only C<String::Print> cleanly
 separates the roles of serializers, modifiers, and conversions.
 
-C<String::Print> is nicely integrated with M<Log::Report>.
+C<String::Print> is nicely integrated with Log::Report.
 
 =cut
 

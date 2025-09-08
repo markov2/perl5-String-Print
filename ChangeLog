@@ -6,9 +6,13 @@ stated differently.
 
 version 0.95:
 
+	Fixes:
+	- printp strings which start with a '%'
+
 	Improvements:
 	- modifier HTML
 	- add .gitignore
+	- convert to OODoc 3.03
 
 version 0.94: Sun  1 Mar 12:37:41 CET 2020
 
