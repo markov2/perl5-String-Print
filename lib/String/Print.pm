@@ -43,11 +43,11 @@ my %default_serializers =
   # CODE value has different purpose
   );
 
-my %predefined_encodings =
-(   HTML =>
-      { exclude => [ qr/html$/i ]
-      , encode  => sub { encode_entities $_[0] }
-      }
+my %predefined_encodings = (
+    HTML => {
+        exclude => [ qr/html$/i ],
+        encode  => sub { encode_entities $_[0] },
+    },
 );
 
 =encoding utf8
@@ -96,7 +96,7 @@ String::Print - printf alternative
   ### via Log::Report::Template (Template Toolkit extension)
 
   [% SET name = 'John Doe' %]
-  [% loc("Dear {name},") %]     # includes translation
+  [% loc("Dear {name},") %]    # includes translation
 
 =chapter DESCRIPTION
 
@@ -132,6 +132,7 @@ object has some benefits.
 =subsection Constructors
 
 =c_method new %options
+The %options of the constructure configure processing options.
 
 =option  modifiers ARRAY
 =default modifiers C<[ qr/^%\S+/ => \&format_printf]>
@@ -157,11 +158,11 @@ inserted.  May can overrule that behavior.
 
 =examples
 
-  my $f = String::Print->new
-    ( modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ]
-    , serializers => [ UNDEF => sub {'-'} ]
-    , encode_for  => 'HTML'
-    );
+  my $f = String::Print->new(
+    modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ],
+    serializers => [ UNDEF => sub {'-'} ],
+    encode_for  => 'HTML',
+  );
 
   $f->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
   $f->printi("count: {c}", c => undef);      # count: -
@@ -178,8 +179,7 @@ sub init($)
     }
 
     my $s    = $args->{serializers} || {};
-    my $seri = $self->{SP_seri}
-      = { %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
+    my $seri = $self->{SP_seri} = { %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
 
     $self->encodeFor($args->{encode_for});
     $self->{SP_missing} = $args->{missing_key} || \&_reportMissingKey;
@@ -194,8 +194,9 @@ sub import(@)
         $func{shift()} = 1;
     }
 
-    if(@_ && $_[0] eq 'oo')   # only object oriented interface
-    {   shift @_;
+    if(@_ && $_[0] eq 'oo')
+    {   # import only object oriented interface
+        shift @_;
         @_ and die "no options allowed at import with oo interface";
         return;
     }
@@ -218,12 +219,13 @@ sub import(@)
 The PAIRS are a combination of an selector and a CODE which processes the
 value when the modifier matches.  The selector is a string or (preferred)
 a regular expression. Later modifiers with the same name overrule earlier
-definitions.  You may also specify an ARRAY of modifiers per C<print>.
+definitions.  You may also specify an ARRAY of modifiers per M<printi()>
+or M<printp()>.
 
 See section L</"Interpolation: Modifiers"> about the details.
 =cut
 
-sub addModifiers(@) {my $self = shift; unshift @{$self->{SP_modif}}, @_}
+sub addModifiers(@) { my $s = shift; unshift @{$s->{SP_modif}}, @_ }
 
 =method encodeFor HASH|undef|($predefined, %overrule)
 [0.91] Enable/define the output encoding.
@@ -236,8 +238,8 @@ sub encodeFor($)
         or return $self->{SP_enc} = undef;
 
     my %def;
-    if(ref $type eq 'HASH') {
-        %def = %$type;
+    if(ref $type eq 'HASH')
+    {   %def = %$type;
     }
     else 
     {   my $def = $predefined_encodings{$type}
@@ -254,7 +256,9 @@ sub encodeFor($)
     $self->{SP_enc} = \%def;
 }
 
-# You cannot have functions and methods with the same name in OODoc and POD
+#XXX
+# OODoc does not like it when we have methods and functions with the same name.
+
 =subsection Printing
 
 The following are provided as method and as function.  You find their
@@ -336,10 +340,10 @@ sub sprinti($@)
         push @parts, $encode->($args->{_prepend}) if defined $args->{_prepend};
         push @parts, $encode->(shift @frags);
         while(@frags) {
-            my ($name, $tricks) = (shift @frags)
-                =~ m!^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$!o or die $format;
+            my ($name, $tricks) =
+                (shift @frags) =~ m!^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$!o or die $format;
 
-        push @parts, $name =~ $exclude
+            push @parts, $name =~ $exclude
               ? $self->_expand($name, $tricks, $args)
               : $encode->($self->_expand($name, $tricks, $args));
 
@@ -351,9 +355,9 @@ sub sprinti($@)
     {   push @parts, $args->{_prepend} if defined $args->{_prepend};
         push @parts, shift @frags;
         while(@frags) {
-        (shift @frags) =~ /^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$/o
+            (shift @frags) =~ /^\s*([\pL\p{Pc}\pM][\w.]*)\s*(.*?)\s*$/o
                 or die $format;
-        push @parts, $self->_expand($1, $2, $args);
+            push @parts, $self->_expand($1, $2, $args);
             push @parts, shift @frags if @frags;
         }
         push @parts, $args->{_append} if defined $args->{_append};
@@ -368,16 +372,14 @@ sub _expand($$$)
     my $value;
     if(index($key, '.')== -1)
     {   # simple value
-        $value = exists $args->{$key} ? $args->{$key}
-          : $self->_missingKey($key, $args);
+        $value = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
         $value = $value->($self, $key, $args)
             while ref $value eq 'CODE';
     }
     else
     {   my @parts = split /\./, $key;
         my $key   = shift @parts;
-        $value = exists $args->{$key} ? $args->{$key}
-          : $self->_missingKey($key, $args);
+        $value    = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
 
         $value = $value->($self, $key, $args)
             while ref $value eq 'CODE';
@@ -419,7 +421,7 @@ sub _expand($$$)
         return "{unknown modifier '$modifier'}";
     }
 
-    my $seri   = $self->{SP_seri}{defined $value ? ref $value : 'UNDEF'};
+    my $seri = $self->{SP_seri}{defined $value ? ref $value : 'UNDEF'};
     $seri ? $seri->($self, $value, $args) : "$value";
 }
 
@@ -434,9 +436,7 @@ sub _reportMissingKey($$)
     my $depth = 0;
     my ($filename, $linenr);
     while((my $pkg, $filename, $linenr) = caller $depth++)
-    {   last unless
-            $pkg->isa(__PACKAGE__)
-         || $pkg->isa('Log::Report::Minimal::Domain');
+    {   last unless $pkg->isa(__PACKAGE__) || $pkg->isa('Log::Report::Minimal::Domain');
     }
 
     warn $self->sprinti
@@ -456,12 +456,11 @@ sub _modif_format($$$$)
     use locale;
     if(ref $value eq 'ARRAY')
     {   @$value or return '(none)';
-        return [ map $self->_format_print($format, $_, $args), @$value ] ;
+        return [ map $self->_format_print($format, $_, $args), @$value ];
     }
     elsif(ref $value eq 'HASH')
     {   keys %$value or return '(none)';
-        return { map +($_ => $self->_format_print($format, $value->{$_}, $args))
-                   , keys %$value } ;
+        return { map +($_ => $self->_format_print($format, $value->{$_}, $args)), keys %$value } ;
     }
 
     $format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
@@ -474,8 +473,7 @@ sub _modif_format($$$$)
     # The latter means: minimal 3 chars, max 5, padding right with blanks.
     # All inserted strings are upgraded into utf8.
 
-    my $s = Unicode::GCString->new
-      ( is_utf8($value) ? $value : decode(latin1 => $value));
+    my $s = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
 
     my $pad;
     if($u eq 'S')
@@ -485,7 +483,7 @@ sub _modif_format($$$$)
         # wider than max.  Waiting for $s->trim($max) if $max, see
         # https://rt.cpan.org/Public/Bug/Display.html?id=84549
         $s->substr(-1, 1, '')
-           while $max && $s->columns > $max;
+            while $max && $s->columns > $max;
 
         $pad = $width ? $width - $s->columns : 0;
     }
@@ -596,8 +594,8 @@ sub _modif_undef($$$)
     $format =~ m!//"([^"]*)"|//'([^']*)'|//(\w*)! ? $+ : undef;
 }
 
-=function printi [$fh], $format, PAIRS|HASH
-Calls M<sprinti()> to fill the data in PAIRS or HASH in $format, and
+=function printi [$fh], $format, %data|\%data
+Calls M<sprinti()> to fill the %data into $format, and
 then sends it to the $fh (by default the selected file)
 
   open my $fh, '>', $file;
@@ -614,8 +612,8 @@ sub printi($$@)
 }
 
 
-=function printp [$fh], $format, PAIRS|HASH
-Calls M<sprintp()> to fill the data in PAIRS or HASH in $format, and
+=function printp [$fh], $format, %data|\%data
+Calls M<sprintp()> to fill the %data in $format, and
 then sends it to the $fh (by default the selected file)
 =cut
 
@@ -625,26 +623,24 @@ sub printp($$@)
     $fh->print($self->sprintp(@_));
 }
 
-=function sprintp $format, LIST, PAIRS
+=function sprintp $format, @positionals, %data
 Where M<sprinti()> uses named parameters --especially useful when the
 strings need translation-- this function stays close to the standard
 C<sprintf()>.  All features of POSIX formats are supported.  This
-should say enough: you can use C<%3$0#5.*d>, if you like.
+should say enough: you can use C<< %3$0#5.*d >>, if you like.
 
 It may be useful to know that the positional $format is rewritten and
-then fed into M<sprinti()>.  B<Be careful> with the length of the LIST:
-superfluous parameter PAIRS are passed along to C<sprinti()>, and
+then fed into M<sprinti()>.  B<Be careful> with the length of the @positionals:
+superfluous parameter %data are passed along to C<sprinti()>, and
 should only contain "specials": parameter names which start with '_'.
 
 =example of the rewrite
 
   # positional parameters
-  my $x = sprintp "dumpfiles: %s\n", \@dumpfiles
-     , _join => ':';
+  my $x = sprintp "dumpfiles: %s\n", \@dumpfiles, _join => ':';
 
   # is rewritten into, and then processed as
-  my $x = sprinti "dumpfiles: {_1}\n"
-     , _1 => \@dumpfiles, _join => ':';
+  my $x = sprinti "dumpfiles: {_1}\n", _1 => \@dumpfiles, _join => ':';
 
 =cut
 
@@ -969,7 +965,7 @@ for instance, help you with rounding or columns:
 
 The POSIX C<printf()> does not handle unicode strings.  Perl does
 understand that the 's' modifier may need to insert utf8 so does not
-count bytes but characters.  C<printi()> does not use characters but
+count bytes but characters.  M<printi()> does not use characters but
 "grapheme clusters" via M<Unicode::GCString>.  Now, also composed
 characters do work correctly.
 
@@ -1079,13 +1075,13 @@ a CODE, which is called when the selector matches.  The selector is either
 a string or a regular expression.
 
   # in Object Oriented syntax:
-  my $f = String::Print->new
-    ( modifiers => [ qr/[€₤]/ => \&money ]
-    );
+  my $f = String::Print->new(
+    modifiers => [ qr/[€₤]/ => \&money ],
+  );
 
   # in function syntax:
-  use String::Print 'printi', 'sprinti'
-    , modifiers => [ qr/[€₤]/ => \&money ];
+  use String::Print 'printi', 'sprinti',
+    modifiers => [ qr/[€₤]/ => \&money ];
 
   # the implementation:
   sub money$$$$)
@@ -1190,13 +1186,12 @@ Shortest:
 Shorter that the original, and translations for free!
 More examples in M<Log::Report::Template>.
 
-
 =subsection Output encoding exclusion
 
 In some cases, the data which is inserted is already encoded in the
 output syntax.  For instance, you already have HTML to be included.
 
-The default exclusion rule for HTML output is C<qr/html$/i>, which
+The default exclusion rule for HTML output is C<< qr/html$/i >>, which
 means that all inserted named parameters, where the name ends on C<html>
 will not get html-entity encoded.
 
@@ -1204,11 +1199,11 @@ This will work by default:
 
   # with encodeFor('HTML')
   printp "Me & Co: {name}, {description_html}",
-     name => 'René', description_html => $descr;
+     name => 'RenE<eacute>', description_html => $descr;
 
 This may result in:
 
-  Me &amp; Co: Ren&eacute;, <font color="red">new member</font>
+  Me E<amp>amp; Co: RenE<amp>eacute;, <font color="red">new member</font>
 
 Better not to have HTML in your program: leave it to the template.  But
 in some cases, you have no choice.
@@ -1219,8 +1214,8 @@ in some cases, you have no choice.
 There are a quite a number of modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
 L<String::Format|http://search.cpan.org/~darren/String-Format>,
-L<String::Errf|http://http://search.cpan.org/~rjbs/String-Errf>,
-L<String::Formatter|http://http://search.cpan.org/~rjbs/String-Formatter>,
+L<String::Errf|http://search.cpan.org/~rjbs/String-Errf>,
+L<String::Formatter|http://search.cpan.org/~rjbs/String-Formatter>,
 L<Text::Sprintf::Named|http://search.cpan.org/~shlomif/Text-Sprintf-Named>,
 L<Acme::StringFormat|http://search.cpan.org/~gfuji/Acme-StringFormat>,
 L<Text::sprintf|http://search.cpan.org/~sharyanto/Text-sprintfn>,
