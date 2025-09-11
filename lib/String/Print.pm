@@ -26,6 +26,7 @@ my @default_modifiers   = (
 	qr/DT\b/        => \&_modif_dt,
 	qr/DATE\b/      => \&_modif_date,
 	qr/TIME\b/      => \&_modif_time,
+	qr/\=/          => \&_modif_name,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
 );
 
@@ -357,9 +358,10 @@ sub sprinti($@)
 
 sub _expand($$$)
 {	my ($self, $key, $modifier, $args) = @_;
+	local $args->{varname} = $key;
 
 	my $value;
-	if(index($key, '.')== -1)
+	if(index($key, '.') == -1)
 	{	# simple value
 		$value = exists $args->{$key} ? $args->{$key} : $self->_missingKey($key, $args);
 		$value = $value->($self, $key, $args)
@@ -604,6 +606,11 @@ sub _modif_undef($$$)
 {	my ($self, $format, $value, $args) = @_;
 	return $value if defined $value && length $value;
 	$format =~ m!//"([^"]*)"|//'([^']*)'|//(\w*)! ? $+ : undef;
+}
+
+sub _modif_name($$$)
+{	my ($self, $format, $value, $args) = @_;
+	"$args->{varname}$format$value";
 }
 
 =function printi [$fh], $format, %data|\%data
@@ -1103,6 +1110,14 @@ different kinds of output:
 
   "price: {price//5 EUR}"
   "price: {price EUR//unknown}"
+
+=subsection Default modifiers: '='
+
+[0.96] As (always trailing) modifier, this will show the interpolated
+name before the value.  It might simplify debugging statements.
+
+  printi "visitors: {count=}", count => 1;      # visitors: count=1
+  printi "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
 
 =subsection Private modifiers
 

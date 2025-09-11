@@ -35,7 +35,7 @@ is $f->sprinti("x={v%.d}", v => 0), 'x=0';
 is $f->sprinti("x={v%_d}",  v => -1e4), 'x=-10_000';
 is $f->sprinti("x={v%+_d}", v => -1e4), 'x=-10_000';
 is $f->sprinti("x={v%+_d}", v =>  1e4), 'x=+10_000';
-is $f->sprinti("x={v% 5_d}", v =>  1e4), 'x= 10_000';
+is $f->sprinti("x={v% _d}", v =>  1e4), 'x= 10_000';
 
 is $f->sprinti("x={v%-10.d}", v =>  1e4), 'x=10.000    ';
 is $f->sprinti("x={v%10.d}",  v =>  1e4), 'x=    10.000';
