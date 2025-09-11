@@ -537,11 +537,12 @@ sub _modif_html($$$)
 
 # Be warned: %F and %T (from C99) are not supported on Windows
 my %dt_format = (
-	ASC     => '%a %b %e %H:%M:%S %Y',
-	ISO     => '%Y-%m-%dT%H:%M:%S%z',
-	RFC2822 => '%a, %d %b %Y %H:%M:%S %z',
-	RFC822  => '%a, %d %b %y %H:%M:%S %z',
-	FT      => '%Y-%m-%d %H:%M:%S',
+	ASC     => '%a %b %e %T %Y',
+	ISO     => '%Y-%m-%dT%T%z',
+	RFC822  => '%a, %d %b %y %T %z',
+	RFC2822 => '%a, %d %b %Y %T %z',
+	RFC5322 => '%a, %d %b %Y %T %z',
+	FT      => '%Y-%m-%d %T',
 );
 
 sub _modif_year($$$)
@@ -967,6 +968,9 @@ Above example in M<printp()> syntax, shorter but less maintainable:
 
 =section Interpolation: default modifiers
 
+Some useful modifiers are already provided by default.  They are also
+good examples how to write your own.
+
 =subsection Default modifier: POSIX format starts with '%'
 
 As shown in the examples above, you can specify a format.  This can,
@@ -993,7 +997,7 @@ specify its width, then there is no performance penalty for using 'S'.
   # name right aligned, commas on same position, always
   printp "name: {name%20S},\n", name => $some_chinese;
 
-=subsubsection POSIX modifier extensions '%[+- ]?[0-9]*[_,.]d'
+=subsubsection POSIX modifier extensions '%[+ -]?[0-9]*[_,.]d'
 
 [0.96] Only available when you print (big) decimals: add an underscore,
 comma, or dot on the thousands.
@@ -1075,10 +1079,11 @@ The short form C<DT> is an alias for C<DT(FT)>.  The DT modifier can
 produce different formats:
 
   DT(ASC)     : %a %b %e %T %Y       asctime output
-  DT(FT)      : %F %T                YYYY-MM-DD HH:mm:ss
+  DT(FT)      : %F %T                YYYY-MM-DD HH:MM:SS
   DT(ISO)     : %FT%T%z              iso8601
   DT(RFC822)  : %a, %d %b %y %T %z   email old
   DT(RFC2822) : %a, %d %b %Y %T %z   email newer
+  DT(RFC5322) : %a, %d %b %Y %T %z   email newest [0.96]
 
 You may suggest additional formats, or add your own modifier.
 
