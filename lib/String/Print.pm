@@ -18,7 +18,7 @@ use POSIX             qw/strftime/;
 use Scalar::Util      qw/blessed reftype/;
 
 my @default_modifiers   = (
-	qr/\%\S+/       => \&_modif_format,
+	qr/\% ?\S+/     => \&_modif_format,
 	qr/BYTES\b/     => \&_modif_bytes,
 	qr/HTML\b/      => \&_modif_html,
 	qr/YEAR\b/      => \&_modif_year,
@@ -106,8 +106,6 @@ module!
 
 =chapter METHODS
 
-=section The Object Oriented interface
-
 See functions M<printi()>, M<sprinti()>, M<printp()>, and M<sprintp()>: you
 can also call them as method.
 
@@ -124,7 +122,7 @@ in multiple source files, or when you need different configurations
 within one program.  In these cases, the hassle of explicitly using the
 object has some benefits.
 
-=subsection Constructors
+=section Constructors
 
 =c_method new %options
 The %options of the constructure configure processing options.
@@ -208,7 +206,7 @@ sub import(@)
 }
 
 #--------------------
-=subsection Attributes
+=section Attributes
 
 =method addModifiers PAIRS
 The PAIRS are a combination of an selector and a CODE which processes the
@@ -255,7 +253,7 @@ sub encodeFor($)
 # OODoc does not like it when we have methods and functions with the same name.
 
 #--------------------
-=subsection Printing
+=section Printing
 
 The following are provided as method and as function.  You find their
 explanation further down on this page.
@@ -439,24 +437,8 @@ sub _reportMissingKey($$)
 }
 
 # See dedicated section in explanation in DETAILS
-sub _modif_format($$$$)
-{	my ($self, $format, $value, $args) = @_;
-	defined $value && length $value or return undef;
-
-	use locale;
-	if(ref $value eq 'ARRAY')
-	{	@$value or return '(none)';
-		return +[ map $self->_format_print($format, $_, $args), @$value ];
-	}
-	elsif(ref $value eq 'HASH')
-	{	keys %$value or return '(none)';
-		return +{ map +($_ => $self->_format_print($format, $value->{$_}, $args)), keys %$value } ;
-	}
-
-	$format =~ m/^\%([-+ ]?)([0-9]*)(?:\.([0-9]*))?([sS])$/
-		or return sprintf $format, $value;   # simple: not a string
-
-	my ($padding, $width, $max, $u) = ($1, $2, $3, $4);
+sub _modif_format_s($$$$$)
+{	my ($value, $padding, $width, $max, $u) = @_;
 
 	# String formats like %10s or %-3.5s count characters, not width.
 	# String formats like %10S or %-3.5S are subject to column width.
@@ -486,6 +468,45 @@ sub _modif_format($$$$)
 	  $pad==0         ? $s->as_string
 	: $padding eq '-' ? $s->as_string . (' ' x $pad)
 	:                   (' ' x $pad) . $s->as_string;
+}
+
+sub _modif_format_d($$$$)
+{	my ($value, $padding, $max, $sep) = @_;
+	my $d = sprintf "%d", $value;   # what perl usually does with floats etc
+	my $v = reverse(reverse($d) =~ s/([0-9][0-9][0-9])/$1$sep/gr);
+	$v =~ s/^\.//;
+
+	if($d !~ /^\-/)
+	{	$v = "+$v" if $padding eq '+';
+		$v = " $v" if $padding eq ' ';
+	}
+	$max or return $v;
+
+	my $pad = $max - length $v;
+
+	    $pad <= 0       ? $v 
+	  : $padding eq '-' ? $v . (' ' x $pad)
+	  : $padding eq ''  ? (' ' x $pad) . $v
+	  :   $v;
+}
+
+sub _modif_format($$$$)
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
+
+	use locale;
+	if(ref $value eq 'ARRAY')
+	{	@$value or return '(none)';
+		return +[ map $self->_format_print($format, $_, $args), @$value ];
+	}
+	elsif(ref $value eq 'HASH')
+	{	keys %$value or return '(none)';
+		return +{ map +($_ => $self->_format_print($format, $value->{$_}, $args)), keys %$value } ;
+	}
+
+	  $format =~ m/^\%(\-?)([0-9]*)(?:\.([0-9]*))?([sS])$/ ? _modif_format_s($value, $1, $2, $3, $4)
+	: $format =~ m/^\%([+\ \-]?)([0-9]*)([_,.])d$/ ? _modif_format_d($value, $1, $2, $3)
+	:    return sprintf $format, $value;   # simple: standard perl sprintf()
 }
 
 # See dedicated section in explanation in DETAILS
@@ -946,7 +967,7 @@ Above example in M<printp()> syntax, shorter but less maintainable:
 
 =section Interpolation: default modifiers
 
-=subsection Default modifier: POSIX format
+=subsection Default modifier: POSIX format starts with '%'
 
 As shown in the examples above, you can specify a format.  This can,
 for instance, help you with rounding or columns:
@@ -955,7 +976,7 @@ for instance, help you with rounding or columns:
   printp "weight is {kilogram%d}", kilogram => 127*OUNCE_PER_KILO;
   printp "{filename%-20.20s}\n", filename => $fn;
 
-=subsubsection - improvements on POSIX format
+=subsubsection POSIX modifier extension '%S'
 
 The POSIX C<printf()> does not handle unicode strings.  Perl does
 understand that the 's' modifier may need to insert utf8 so does not
@@ -972,6 +993,22 @@ specify its width, then there is no performance penalty for using 'S'.
   # name right aligned, commas on same position, always
   printp "name: {name%20S},\n", name => $some_chinese;
 
+=subsubsection POSIX modifier extensions '%[+- ]?[0-9]*[_,.]d'
+
+[0.96] Only available when you print (big) decimals: add an underscore,
+comma, or dot on the thousands.
+
+  printi "{count%_d}\n", count => 1e9;   # 1_000_000_000
+  printi "{count%,d}\n", count => 1e9;   # 1,000,000,000
+  printi "{count%.d}\n", count => 1e9;   # 1.000.000.000
+
+  printi "'{v%10.d}'",  v =>  10000;   # '    10.000';
+  printi "'{v%10_d}'",  v => -10000;   # '   -10_000';
+  printi "'{v%-10.d}'", v =>  10000;   # '10.000    ';
+  printi "'{v%-10.d}'", v => -10000;   # '-10.000   ';
+  printi "'{v%+10,d}'", v =>  10000;   # '   +10,000';
+  printi "'{v% ,d}'",   v =>  10000;   # ' 10,000';
+  printi "'{v% ,d}'",   v => -10000;   # '-10,000';
 
 =subsection Default modifier: BYTES
 
@@ -1116,10 +1153,10 @@ formatter understands where one ends and the next begins.
 The modifiers are called in order:
 
   printi "price: {p€%9s}\n", p => $p; # price: ␣␣␣123.45
-  printi ">{t T%10s}<", t => $now;    # >␣␣12:59:17<
+  printi "!{t T%10s}!", t => $now;    # !␣␣12:59:17!
 
   printp "price: %9{€}s\n", $p;       # price: ␣␣␣123.45
-  printp ">%10{T}s<", $now;           # >␣␣12:59:17<
+  printp "!%10{T}s!", $now;           # !␣␣12:59:17!
 
 
 =section Output encoding

@@ -22,7 +22,9 @@ my %oodist   = (
 
 	parser   => {
 		syntax         => 'markov',
-		skip_links     => [ ],
+		skip_links     => [
+			'Locale::TextDomain',
+		],
 		pmhead         => undef,
 	},
 
