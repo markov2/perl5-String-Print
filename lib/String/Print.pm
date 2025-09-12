@@ -70,7 +70,7 @@ String::Print - printf alternative
   printp 'dump: %s', \%settings;
 
   # modifiers
-  printi 'price: {price%.2f}', price => 3.14*VAT*EURO;
+  printi 'price: {price%.2f}', price => 3.14 * EURO;
 
   # [0.91] more complex interpolation names
   printi 'filename: {c.filename}', c => \%config;
@@ -79,7 +79,7 @@ String::Print - printf alternative
 
   ### Object Oriented interface
 
-  use String::Print 'oo';      # import nothing
+  use String::Print 'oo', %config;      # import no functions
   my $f = String::Print->new(%config);
   $f->printi('age {years}', years => 12);
   $f->printp('age %d', 12);
@@ -158,7 +158,7 @@ inserted.  May can overrule that behavior.
     encode_for  => 'HTML',
   );
 
-  $f->printi("price: {p EUR}", p => 3.1415); # price: XX3.14 e (X=blank)
+  $f->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
   $f->printi("count: {c}", c => undef);      # count: -
 =cut
 
@@ -617,7 +617,7 @@ sub _modif_name($$$)
 Calls M<sprinti()> to fill the %data into $format, and
 then sends it to the $fh (by default the selected file)
 
-  open my $fh, '>', $file;
+  open my $fh, '>:encoding(UTF-8)', $file;
   printi $fh, ...
 
   printi \*STDERR, ...
@@ -679,13 +679,15 @@ sub _printp_rewrite($)
 			next;
 		}
 
-		$printp =~ s/\%(?:([0-9]+)\$)?      # 1=positional
-						([-+0 \#]*)         # 2=flags
-						([0-9]*|\*)?        # 3=width
-						(?:\.([0-9]*|\*))?  # 4=precission
-						(?:\{ ([^}]*) \})?  # 5=modifiers
-						(\w)                # 6=conversion
-					//x
+		$printp =~ s/
+			\%
+			(?:([0-9]+)\$)?     # 1=positional
+			([-+0 \#]*)         # 2=flags
+			([0-9]*|\*)?        # 3=width
+			(?:\.([0-9]*|\*))?  # 4=precission
+			(?:\{ ([^}]*) \})?  # 5=modifiers
+			(\w)                # 6=conversion
+		//x
 			or die "format error at '$printp' in '$params[0]'";
 
 		$pos       = $1 if $1;
@@ -713,7 +715,10 @@ sub sprintp(@)
 #--------------------
 =chapter DETAILS
 
-=section Why use C<printi()>, not C<printf()>?
+  Your manual-page reader may not support the unicode used
+  in some of the examples below.
+
+=section Why use C<printi()> to replace C<printf()>?
 
 The C<printf()> function is provided by Perl's CORE; you do not need
 to install any module to use it.  Why would you use consider using
@@ -777,8 +782,6 @@ Simplified:
 
 Example:
 
-  #XXX Your manual-page reader may not support the unicode used
-  #XXX in the examples below.
   printi "price: {price € %-10s}", price => $cost;
   printi "price: {price € %-10s}", { price => $cost };
   printp "price: %-10{€}s", $cost;
@@ -798,7 +801,6 @@ separated by dots (no blanks!)
 B<Please> use explanatory key names, to help the translation
 process once you need that (in the future).
 
-
 =subsection Simple keys
 
 A simple key directly refers to a named parameter of the function or method:
@@ -813,7 +815,6 @@ You may also pass them as HASH or CODE:
   printi "Username: {name}", name => sub { sub {'John'} };
 
 The smartness of pre-processing CODE is part of serialization.
-
 
 =subsection Complex keys
 
@@ -927,10 +928,12 @@ objects get stringified.
 
 =section Interpolation: Modifiers
 
-Modifiers are used to change the value to be inserted, before the characters
-get interpolated in the line.  This is a powerful simplification.  Let's
-discuss this with an example.
+Modifiers are used to change the value to be inserted, before
+the characters get interpolated in the line.  This is a powerful
+simplification.  Some useful modifiers are already provided by default.
+They are also good examples how to write your own.
 
+Let's discuss this with an example.
 In traditional (gnu) gettext, you would write:
 
   printf(gettext("approx pi: %.6f\n"), PI);
@@ -972,13 +975,7 @@ Above example in M<printp()> syntax, shorter but less maintainable:
   printp "%s %2d %-8s 10d %s\n",
      '-rw-r--r--', 7, 'me', 12345, $filename;
 
-
-=section Interpolation: default modifiers
-
-Some useful modifiers are already provided by default.  They are also
-good examples how to write your own.
-
-=subsection Default modifier: POSIX format starts with '%'
+=subsection Modifier: POSIX format starts with '%'
 
 As shown in the examples above, you can specify a format.  This can,
 for instance, help you with rounding or columns:
@@ -1021,7 +1018,7 @@ comma, or dot on the thousands.
   printi "'{v% ,d}'",   v =>  10000;   # ' 10,000';
   printi "'{v% ,d}'",   v => -10000;   # '-10,000';
 
-=subsection Default modifier: BYTES
+=subsection Modifier: BYTES
 
 [0.91] Too often, you have to translate a (file) size into humanly readible
 format.  The C<BYTES> modifier simplifies this a lot:
@@ -1031,11 +1028,11 @@ format.  The C<BYTES> modifier simplifies this a lot:
 The output will always be 6 characters.  Examples are "999  B", "1.2 kB",
 and " 27 MB".
 
-=subsection Default modifier: HTML
+=subsection Modifier: HTML
 
 [0.95] interpolate the parameter with HTML entity encoding.
 
-=subsection Default modifiers: YEAR, DATE, TIME, DT, and DT()
+=subsection Modifiers: YEAR, DATE, TIME, DT, and DT()
 
 [0.91] A set of modifiers help displaying dates and times.  They are a
 little flexible in values they accept, but do not expect miracles: when
@@ -1094,7 +1091,7 @@ produce different formats:
 
 You may suggest additional formats, or add your own modifier.
 
-=subsection Default modifiers: //word, //"string", //'string'
+=subsection Modifier: //word, //"string", //'string'
 
 [0.91] By default, an undefined value is shown as text 'undef'.  Empty
 strings are shown as nothing.  This may not be nice.  You may want to
@@ -1111,7 +1108,7 @@ different kinds of output:
   "price: {price//5 EUR}"
   "price: {price EUR//unknown}"
 
-=subsection Default modifiers: '='
+=subsection Modifier: '='
 
 [0.96] As (always trailing) modifier, this will show the interpolated
 name before the value.  It might simplify debugging statements.
@@ -1164,7 +1161,7 @@ Another example.  Now, we want to add timestamps.  In this case, we
 decide for modifier names in C<\w>, so we need a blank to separate
 the parameter from the modifer.
 
-=subsection Modifiers: stacking
+=subsection Stacking modifiers
 
 You can add more than one modifier.  The modifiers detect the extend of
 their own information (via a regular expression), and therefore the
@@ -1186,7 +1183,7 @@ to insert (translated) strings with parameters into HTML templates.
 You can imagine that some of the parameter may need to be encoded to
 HTML in the template, and other not.
 
-=subsection example with Log::Report::Template
+=subsection Example with Log::Report::Template
 
 In pure Template Toolkit, you would write
 
