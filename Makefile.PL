@@ -4,15 +4,15 @@ use 5.016;
 
 
 # Use command 'oodist' to produce your whole software release.
-my $version  = '0.96';
+my $version  = '1.00';
 my $git      = "https://github.com/markov2/perl5-String-Print";
 my $publish  = "../public_html/string-print";
 my $homepage = "http://perl.overmeer.net/CPAN/";
 
 my %oodist   = (
 	oodoc_version => 3.04,
-	first_year => 2016,
-	email    => "markov\@cpan.org",
+	first_year    => 2016,
+	email         => "markov\@cpan.org",
 
 	include  => [
 	],
