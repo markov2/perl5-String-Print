@@ -49,20 +49,21 @@ my %oodist   = (
 	],
 );
 
-WriteMakefile
-	NAME      => 'String::Print',
-	VERSION   => $version,
-	PREREQ_PM => +{
-		'Test::More'        => 0.86,
-		'Unicode::GCString' => 0,
-		'Encode'            => 0,
-		'HTML::Entities'    => 0,
-		'Date::Parse'       => 2.30,
-	},
+my %requires = (
+	'Test::More'        => 0.86,
+	'Unicode::GCString' => 0,
+	'Encode'            => 0,
+	'HTML::Entities'    => 0,
+	'Date::Parse'       => 2.30,
+);
 
+WriteMakefile
+	NAME      => 'String-Print',
+	VERSION   => $version,
 	AUTHOR     => 'Mark Overmeer <markov@cpan.org>',
 	ABSTRACT   => 'printf extensions',
 	LICENSE    => 'perl_5',
+
 	META_MERGE => {
 		'meta-spec' => { version => 2 },
 		resources   => {
@@ -71,20 +72,26 @@ WriteMakefile
 				url  => "$git.git",
 				web  => $git,
 			},
+			bugtracker => {
+				web  => "$git/issues",
+			},
 			homepage => $homepage,
 			license  => [ 'http//dev.perl.org/licenses/' ],
 		},
 		prereqs => {
+			runtime => {
+				requires => \%requires,
+			},
 			develop => {
 				requires => {
 					'OODoc' => 3.04,
-				}
+				},
 			},
 			test => {
 				requires => {
 					'Test::More' => 1.00,
 					'Test::Pod'  => 1.00,
-				}
+				},
 			},
 		},
 
