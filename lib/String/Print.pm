@@ -7,6 +7,7 @@ package String::Print;
 
 use warnings;
 use strict;
+use utf8;
 
 #use Log::Report::Optional 'log-report';
 
@@ -18,15 +19,16 @@ use POSIX             qw/strftime/;
 use Scalar::Util      qw/blessed reftype/;
 
 my @default_modifiers   = (
-	qr/\% ?\S+/     => \&_modif_format,
-	qr/BYTES\b/     => \&_modif_bytes,
-	qr/HTML\b/      => \&_modif_html,
-	qr/YEAR\b/      => \&_modif_year,
-	qr/DT\([^)]*\)/ => \&_modif_dt,
-	qr/DT\b/        => \&_modif_dt,
-	qr/DATE\b/      => \&_modif_date,
-	qr/TIME\b/      => \&_modif_time,
-	qr/\=/          => \&_modif_name,
+	qr/\% ?\S+/      => \&_modif_format,
+	qr/BYTES\b/      => \&_modif_bytes,
+	qr/HTML\b/       => \&_modif_html,
+	qr/YEAR\b/       => \&_modif_year,
+	qr/DT\([^)]*\)/  => \&_modif_dt,
+	qr/DT\b/         => \&_modif_dt,
+	qr/DATE\b/       => \&_modif_date,
+	qr/TIME\b/       => \&_modif_time,
+	qr/\=/           => \&_modif_name,
+	qr!EL\([0-9]+(?:\,?[^)]+)?\)!     => \&_modif_ellipsis,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
 );
 
@@ -592,7 +594,7 @@ sub _modif_dt($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
 
-	my $kind    = ($format =~ m/DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
+	my $kind    = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
 	my $pattern = $dt_format{$kind}
 		or return "dt format $kind not known";
 
@@ -611,6 +613,31 @@ sub _modif_undef($$$)
 sub _modif_name($$$)
 {	my ($self, $format, $value, $args) = @_;
 	"$args->{varname}$format$value";
+}
+
+sub _modif_ellipsis($$$)
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
+	$format =~ m/^ EL\( ([0-9]+) (?:\,?([^)]+))? \)/x or die $format;
+
+	my ($width, $replace) = ($1, $2 // '⋯ ');
+	$width != 0 or return $value;
+
+	# max width of a char is 2
+	return $value if 2 * length($value) < $width;    # surely small enough?
+
+	my $v = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
+	return $value if $width >= $v->columns;          # small enough after counting
+
+	my $s = Unicode::GCString->new(is_utf8($replace) ? $replace : decode(latin1 => $replace));
+	my $take = $width - $s->columns;
+
+	#XXX This is expensive for long texts, but the value could be filled with many zero-widths
+	$v->substr(-1, 1, '') while $v->columns > $take;
+
+	# might be one column short
+	my $pad = $v->columns + $s->columns < $width ? ' ' : '';
+	$v->as_string . $pad . $replace;
 }
 
 =function printi [$fh], $format, %data|\%data
@@ -1108,13 +1135,28 @@ different kinds of output:
   "price: {price//5 EUR}"
   "price: {price EUR//unknown}"
 
-=subsection Modifier: '='
+=subsection Modifier: '=' (show name)
 
 [0.96] As (always trailing) modifier, this will show the interpolated
 name before the value.  It might simplify debugging statements.
 
-  printi "visitors: {count=}", count => 1;      # visitors: count=1
-  printi "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
+  "visitors: {count=}", count => 1;      # visitors: count=1
+  "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
+
+=subsection Modifier: EL($width), EL($width$replace), or EL($width,$replace)
+
+[1.00] When the string is larger than C<$width> columns, then chop it
+short and add a 'mid-line ellipsis' character: C< ⋯  >.  You may also
+pick another replacement string.
+
+Attention: "columns" not "characters": it is aware of wide fonts, like
+chinese characters (see C<%S> above).  The default ellipsis is also two
+columns wide.
+
+  "Intro: {text EL(10)}";     # Intro: 12345678⋯ 
+  "Intro: {text EL(10,⋮)}";   # Intro: 123456789⋮ 
+  "Intro: {text EL(10⋮)}";    # Intro: 123456789⋮ 
+  "Intro: {text EL(10,XY)}";  # Intro: 12345678XY 
 
 =subsection Private modifiers
 
