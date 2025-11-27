@@ -28,6 +28,7 @@ my @default_modifiers   = (
 	qr/DATE\b/       => \&_modif_date,
 	qr/TIME\b/       => \&_modif_time,
 	qr/\=/           => \&_modif_name,
+	qr!CHOP\([0-9]+\)!                => \&_modif_chop,
 	qr!EL\([0-9]+(?:\,?[^)]+)?\)!     => \&_modif_ellipsis,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
 );
@@ -615,6 +616,35 @@ sub _modif_name($$$)
 	"$args->{varname}$format$value";
 }
 
+sub _modif_chop($$$)
+{	my ($self, $format, $value, $args) = @_;
+	defined $value && length $value or return undef;
+	$format =~ m/^ CHOP\( ([0-9]+) \)/x or die $format;
+
+	my $width = $1;
+	$width != 0 or return $value;
+
+	# max width of a char is 2
+	return $value if 2 * length $value < $width;    # surely small enough?
+
+	my $v = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
+	return $value if $width >= $v->columns;          # small enough after counting
+
+	#XXX This is expensive for long texts, but the value could be filled with many zero-widths
+	my ($shortened, $append) = (0, '[+0]');
+	while($v->columns > $width - length $append)
+	{	my $chopped = $v->substr(-1, 1, '');
+warn "NEXT=", $v->columns, '+', $chopped->columns, '=', $width - length $append;
+		$chopped->columns > 0 or next;
+		$shortened++;
+		$append     = "[+$shortened]";
+	}
+
+	# might be one column short
+	my $pad = $v->columns < $width - (length $append) ? ' ' : '';
+	$v->as_string . $pad . $append;
+}
+
 sub _modif_ellipsis($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
@@ -1157,6 +1187,14 @@ columns wide.
   "Intro: {text EL(10,⋮)}";   # Intro: 123456789⋮ 
   "Intro: {text EL(10⋮)}";    # Intro: 123456789⋮ 
   "Intro: {text EL(10,XY)}";  # Intro: 12345678XY 
+
+=subsection Modifier: CHOP($width)
+
+[1.00] When the string is larger than C<$width> columns, then chop it
+short and add C<< [+42] >>: the number of character chopped off.  The
+C<$width> is the size of the result string.
+
+  "Intro: {text CHOP(10)}";     # Intro: 12345[+42]
 
 =subsection Private modifiers
 

@@ -4,15 +4,12 @@
 All modifications where created by Mark Overmeer, unless explicitly
 stated differently.
 
-TODO
-	- add modifier CHOP(20), when the field is larger than 20 chop the
-	  string enough and add '[+42]'.  Together not more than 20 chars.
-
 version 1.00:
 
 	Improvements:
 	- add bugtracker to meta
 	- add ellipsis modifier
+	- add chop modifier
 
 version 0.96: Fri 12 Sep 14:01:16 CEST 2025
 

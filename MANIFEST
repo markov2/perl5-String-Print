@@ -19,4 +19,6 @@ t/52m_dates.t
 t/53m_default.t
 t/54m_html.t
 t/55m_name.t
+t/56_ellipsis.t
+t/57_chop.t
 xt/99pod.t
