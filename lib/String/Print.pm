@@ -28,8 +28,8 @@ my @default_modifiers   = (
 	qr/DATE\b/       => \&_modif_date,
 	qr/TIME\b/       => \&_modif_time,
 	qr/\=/           => \&_modif_name,
-	qr!CHOP\([0-9]+\)!                => \&_modif_chop,
-	qr!EL\([0-9]+(?:\,?[^)]+)?\)!     => \&_modif_ellipsis,
+	qr!CHOP\([0-9]+(?:\,?[^)]*)\)!    => \&_modif_chop,
+	qr!EL\([0-9]+(?:\,?[^)]*)\)!      => \&_modif_ellipsis,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
 );
 
@@ -619,10 +619,14 @@ sub _modif_name($$$)
 sub _modif_chop($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ CHOP\( ([0-9]+) \)/x or die $format;
+	$format =~ m/^ CHOP\( ([0-9]+) \,? ([^)]+)? \)/x or die $format;
 
-	my $width = $1;
+	my ($width, $extra) = ($1, $2 // '');
 	$width != 0 or return $value;
+
+	my $extra_columns = length $extra
+	  ? Unicode::GCString->new(is_utf8($extra) ? $extra : decode(latin1 => $extra))->columns
+	  : 0;
 
 	# max width of a char is 2
 	return $value if 2 * length $value < $width;    # surely small enough?
@@ -631,13 +635,19 @@ sub _modif_chop($$$)
 	return $value if $width >= $v->columns;          # small enough after counting
 
 	#XXX This is expensive for long texts, but the value could be filled with many zero-widths
-	my ($shortened, $append) = (0, '[+0]');
+	my ($shortened, $append) = (0, "[+0$extra]");
 	while($v->columns > $width - length $append)
 	{	my $chopped = $v->substr(-1, 1, '');
-warn "NEXT=", $v->columns, '+', $chopped->columns, '=', $width - length $append;
+
+		unless($chopped->length)
+		{	# nothing left
+			$append = "[$shortened$extra]";
+			last;
+		}
+
 		$chopped->columns > 0 or next;
 		$shortened++;
-		$append     = "[+$shortened]";
+		$append     = "[+$shortened$extra]";
 	}
 
 	# might be one column short
@@ -648,7 +658,7 @@ warn "NEXT=", $v->columns, '+', $chopped->columns, '=', $width - length $append;
 sub _modif_ellipsis($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ EL\( ([0-9]+) (?:\,?([^)]+))? \)/x or die $format;
+	$format =~ m/^ EL\( ([0-9]+) \,? ([^)]+)? \)/x or die $format;
 
 	my ($width, $replace) = ($1, $2 // '⋯ ');
 	$width != 0 or return $value;
@@ -659,14 +669,15 @@ sub _modif_ellipsis($$$)
 	my $v = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
 	return $value if $width >= $v->columns;          # small enough after counting
 
-	my $s = Unicode::GCString->new(is_utf8($replace) ? $replace : decode(latin1 => $replace));
-	my $take = $width - $s->columns;
+	my $r = Unicode::GCString->new(is_utf8($replace) ? $replace : decode(latin1 => $replace));
+	$r->columns < $width or return $replace;
 
 	#XXX This is expensive for long texts, but the value could be filled with many zero-widths
+	my $take = $width - $r->columns;
 	$v->substr(-1, 1, '') while $v->columns > $take;
 
 	# might be one column short
-	my $pad = $v->columns + $s->columns < $width ? ' ' : '';
+	my $pad = $v->columns + $r->columns < $width ? ' ' : '';
 	$v->as_string . $pad . $replace;
 }
 
@@ -1173,11 +1184,11 @@ name before the value.  It might simplify debugging statements.
   "visitors: {count=}", count => 1;      # visitors: count=1
   "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
 
-=subsection Modifier: EL($width), EL($width$replace), or EL($width,$replace)
+=subsection Modifier: EL($width) or EL($width,$replace)
 
 [1.00] When the string is larger than C<$width> columns, then chop it
 short and add a 'mid-line ellipsis' character: C< ⋯  >.  You may also
-pick another replacement string.
+pick another replacement string.   The comma is optional
 
 Attention: "columns" not "characters": it is aware of wide fonts, like
 chinese characters (see C<%S> above).  The default ellipsis is also two
@@ -1187,14 +1198,17 @@ columns wide.
   "Intro: {text EL(10,⋮)}";   # Intro: 123456789⋮ 
   "Intro: {text EL(10⋮)}";    # Intro: 123456789⋮ 
   "Intro: {text EL(10,XY)}";  # Intro: 12345678XY 
+  "Intro: {text EL(10XY)}";   # Intro: 12345678XY 
 
-=subsection Modifier: CHOP($width)
+=subsection Modifier: CHOP($width) or CHOP($width,$extra)
 
 [1.00] When the string is larger than C<$width> columns, then chop it
 short and add C<< [+42] >>: the number of character chopped off.  The
-C<$width> is the size of the result string.
+C<$width> is the size of the result string.  The comma is optional.
 
-  "Intro: {text CHOP(10)}";     # Intro: 12345[+42]
+  "Intro: {text CHOP(10)}";        # Intro: 12345[+42]
+  "Intro: {text CHOP(19 chars)}";  # Intro: 1234578[+33 chars]
+  "Intro: {text CHOP(19, chars)}"; # Intro: 1234578[+33 chars]
 
 =subsection Private modifiers
 

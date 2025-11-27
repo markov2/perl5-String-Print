@@ -22,6 +22,12 @@ is $f->sprinti("Intro: {text EL(50)}", text => $text1), "Intro: $text1", 'fits i
 is $f->sprinti("Intro: {text EL(10)}", text => $text1),
 	"Intro: 12345678⋯ ", 'default ellipsis';
 
+is $f->sprinti("Intro: {text EL(10,)}", text => $text1),
+	"Intro: 12345678⋯ ", 'default ellipsis, empty replace';
+
+is $f->sprinti("Intro: {text EL(1,)}", text => $text1),
+	"Intro: ⋯ ", 'replace too large';
+
 is $f->sprinti("Intro: {text EL(10,⋮)}", text => $text1),
 	"Intro: 123456789⋮", 'vertical ellipsis';
 

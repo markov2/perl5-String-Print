@@ -24,8 +24,20 @@ is $f->sprinti("Intro: {text CHOP(50)}", text => $text1), "Intro: $text1", 'fits
 is $f->sprinti("Intro: {text CHOP(25)}", text => $text1),
 	"Intro: 123456789012345678901[+9]", 'chop short';
 
+is $f->sprinti("Intro: {text CHOP(25 chars)}", text => $text1),
+	"Intro: 12345678901234[+16 chars]", 'chop short with extra';
+
 is $f->sprinti("Intro: {text CHOP(10)}", text => $text1),
 	"Intro: 12345[+25]", 'chop short';
+
+is $f->sprinti("Intro: {text CHOP(12 chars)}", text => $text1),
+	"Intro: 1[+29 chars]", 'chop short with extra';
+
+is $f->sprinti("Intro: {text CHOP(3)}", text => $text1),
+	"Intro: [30]", 'chop too short';
+
+is $f->sprinti("Intro: {text CHOP(5 chars)}", text => $text1),
+	"Intro: [30 chars]", 'chop too short with extra';
 
 #XXX this needs testing for wide and zero-width strings
 
