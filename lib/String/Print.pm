@@ -34,8 +34,9 @@ my @default_modifiers   = (
 );
 
 my %defaults = (
-	EL   => +{ width => 20, replace => '⋯ '},
 	CHOP => +{ width => 20, head => '[', units => '', tail => ']' },
+	DT   => +{ standard => 'FT' },
+	EL   => +{ width => 20, replace => '⋯ '},
 );
 
 my %default_serializers = (
@@ -133,6 +134,10 @@ object has some benefits.
 
 =section Constructors
 
+When you use this package with functions, then you do not call the
+constructor explicitly.  In that case, these M<new()> parameters are
+added to the C<<use String::Print>> line.
+
 =c_method new %options
 The %options of the constructure configure processing options.
 
@@ -150,7 +155,8 @@ How to serialize data elements.
 =default encode_for undef
 [0.91] The format string and the inserted values will get encoded according to
 some syntax rules.  Function C<encode_entities()> provided by HTML::Entities
-is used when you specify the predefined string C<HTML>.  See M<encodeFor()>.
+is used when you specify the predefined string C<HTML>.  See M<encodeFor()>
+and L</Output encoding>.
 
 =option  missing_key CODE
 =default missing_key <warning>
@@ -175,7 +181,7 @@ modifier name to HASH with modifier specific settings.
   $f->printi("count: {c}", c => undef);      # count: -
 =cut
 
-sub new(@) { my $class = shift; (bless {}, $class)->init( {@_} ) }
+sub new(@) { my $class = shift; (bless {}, $class)->init( +{@_} ) }
 
 sub init($)
 {	my ($self, $args) = @_;
@@ -237,8 +243,11 @@ See section L</"Interpolation: Modifiers"> about the details.
 
 sub addModifiers(@) { my $s = shift; unshift @{$s->{SP_modif}}, @_ }
 
-=method encodeFor HASH|undef|($predefined, %overrule)
-[0.91] Enable/define the output encoding.
+=method encodeFor \%settings|undef|($predefined, %overrule)
+[0.91] Enable/define the output encoding.  The %settings contain the C<encoding>
+CODE and the tag name patterns to C<exclude> from encoding.  Output for C<HTML>
+is $predefined, but you may %overrule its settings.
+
 Read section L</"Output encoding"> about the details.
 =cut
 
@@ -252,8 +261,7 @@ sub encodeFor($)
 	{	%def = %$type;
 	}
 	else
-	{	my $def = $predefined_encodings{$type}
-			or die "ERROR: unknown output encoding type $type\n";
+	{	my $def = $predefined_encodings{$type} or die "ERROR: unknown output encoding type $type\n";
 		%def = (%$def, @_);
 	}
 
@@ -270,7 +278,12 @@ sub encodeFor($)
 [1.00] Set the defaults for modifiers, either with a HASH where the key modifier name
 maps to a HASH of settings, or a list of PAIRS.
 
-  $obj->setDefaults(EL => { width => 30 });
+=example setting defaults
+
+  $sp->setDefaults(EL => {width => 30}, CHOP => {width => 10});
+
+  my %defs = (EL => {width => 30}, CHOP => {width => 10});
+  $sp->setDefaults(\%defs);
 
 =cut
 
@@ -290,6 +303,10 @@ sub setDefaults(@)
 
 =method defaults $modifier
 [1.00] Returns the current defaults for the $modifier.
+
+=example getting defaults for a modifier
+  my $def = $sp->defaults('EL');
+  say "Default max width is ", $def->{width};
 =cut
 
 sub defaults($) { $_[0]->{SP_defs}{$_[1]} }
@@ -299,21 +316,31 @@ sub defaults($) { $_[0]->{SP_defs}{$_[1]} }
 
 =section Printing
 
-The following are provided as method and as function.  You find their
-explanation further down on this page.
+The following are provided both as method and as function.  The function
+version is explained further down on this page, because it reads a bit
+easier, but the object version is most flexible.
 
-  $obj->printi([$fh], $format, %data|\%data);
-  $obj->printp([$fh], $format, @params, %options);
-  my $s = $obj->sprinti($format, %data|\%data);
-  my $s = $obj->sprintp($format, @params, %options);
+  my $sp = String::Print->new;
+
+  $sp->printi([$fh], $format, %data|\%data);        # see M<printi()>
+
+  $sp->printp([$fh], $format, @params, %options);   # see M<printp()>
+
+  my $s = $sp->sprinti($format, %data|\%data);      # see M<sprinti()>
+
+  my $s = $sp->sprintp($format, @params, %options); # see M<sprintp()>
 
 =cut
 
 #--------------------
 =chapter FUNCTIONS
 
-The functional interface creates a hidden object.  You may import any of
-these functions explicitly, or all together by not specifying the names.
+The functional interface creates a hidden C<String::Print> object, which is
+reused in the whole active package.  Seperate packages will use different
+hidden objects.
+
+You may import any of these functions explicitly, or all together by
+not specifying the names.
 
 =examples
 
@@ -322,7 +349,8 @@ these functions explicitly, or all together by not specifying the names.
 
   use String::Print 'printi',   # only printi
     modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ],
-    serializers => [ UNDEF => sub {'-'} ];
+    serializers => [ UNDEF => sub {'-'} ],
+    defaults    => [ DT => { standard => 'ISO' } ];
 
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
@@ -635,8 +663,10 @@ sub _modif_dt($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
 
-	my $kind    = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || 'FT';
-	my $pattern = $dt_format{$kind}
+	my $defaults = $self->defaults('DT');
+	my $kind     = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || $defaults->{standard};
+
+	my $pattern  = $dt_format{$kind}
 		or return "dt format $kind not known";
 
 	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
@@ -1177,7 +1207,7 @@ versions, like
   2017-6-1                       # only for YEAR and DATE
   12:34                          # only for TIME
 
-The meaning of 05-04-2017 is unclear, so not supported.  Milliseconds
+The meaning of C<05-04-2017> is ambiguous, so not supported.  Milliseconds
 get ignored.
 
 When the provided value has a timezone indication, it will get
@@ -1188,8 +1218,7 @@ converted into the local timezone of the observer.
 The output of C<YEAR> is in format 'YYYY', for C<DATE> it will always be
 'YYYY-MM-DD', where C<TIME> produces 'HH:mm:ss'.
 
-The short form C<DT> is an alias for C<DT(FT)>.  The DT modifier can
-produce different formats:
+The DT modifier can produce different formats:
 
   DT(ASC)     : %a %b %e %T %Y       asctime output
   DT(FT)      : %F %T                YYYY-MM-DD HH:MM:SS
@@ -1199,6 +1228,10 @@ produce different formats:
   DT(RFC5322) : %a, %d %b %Y %T %z   email newest [0.96]
 
 You may suggest additional formats, or add your own modifier.
+
+The defaults are:
+
+  DT => { standard => 'FT' },
 
 =subsection Modifier: //word, //"string", //'string'
 
@@ -1409,7 +1442,7 @@ Better not to have HTML in your program: leave it to the template.  But
 in some cases, you have no choice.
 
 
-=section Compared to other modules on CPAN
+=section String::Print Compared to other modules on CPAN
 
 There are a quite a number of modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
