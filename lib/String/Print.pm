@@ -321,14 +321,24 @@ version is explained further down on this page, because it reads a bit
 easier, but the object version is most flexible.
 
   my $sp = String::Print->new;
-
   $sp->printi([$fh], $format, %data|\%data);        # see M<printi()>
-
   $sp->printp([$fh], $format, @params, %options);   # see M<printp()>
-
   my $s = $sp->sprinti($format, %data|\%data);      # see M<sprinti()>
-
   my $s = $sp->sprintp($format, @params, %options); # see M<sprintp()>
+
+=examples
+
+  use String::Print 'oo';    # do not import the functions
+
+  my $sp = String::Print->new(
+    modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ],
+    serializers => [ UNDEF => sub {'-'} ],
+    defaults    => [ DT => { standard => 'ISO' } ],
+  );
+
+  $sp->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
+  $sp->printi("count: {c}", c => undef);      # count: -
+  my $s = $sp->sprinti("price: {p EUR}", p => 7); # output in $s
 
 =cut
 
@@ -354,6 +364,7 @@ not specifying the names.
 
   printi "price: {p EUR}", p => 3.1415; # price: ␣␣3.14 e
   printi "count: {c}", c => undef;      # count: -
+  my $s = sprinti "price: {p EUR}", p => 7;  # output in $s
 
 =function sprinti $format, %data|\%data|OBJECT, %options
 The $format refers to some string, maybe the result of a translation.
@@ -753,8 +764,8 @@ sub _modif_ellipsis($$$)
 }
 
 =function printi [$fh], $format, %data|\%data
-Calls M<sprinti()> to fill the %data into $format, and
-then sends it to the $fh (by default the selected file)
+Calls M<sprinti()> to fill the %data into $format, and then sends it to
+the $fh (by default the selected file handle)
 
   open my $fh, '>:encoding(UTF-8)', $file;
   printi $fh, ...
@@ -770,9 +781,9 @@ sub printi($$@)
 }
 
 
-=function printp [$fh], $format, @params, %options
-Calls M<sprintp()> to fill the @params in $format, and
-then sends it to the $fh (by default the selected file)
+=function printp [$fh], $format, @positionals, %options
+Calls M<sprintp()> to fill the @positionals in $format, and
+then sends it to the $fh (by default the selected file handle).
 =cut
 
 sub printp($$@)
