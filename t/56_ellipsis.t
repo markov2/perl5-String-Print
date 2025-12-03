@@ -40,6 +40,11 @@ is $f->sprinti("Intro: {text EL(10,XY)}", text => $text1),
 is $f->sprinti("Intro: {text EL(10XY)}", text => $text1),
 	"Intro: 12345678XY", 'longer replacement without comma';
 
+# Defaults
+
+is $f->sprinti("Intro: {text EL}", text => $text1),
+	"Intro: 123456789012345678⋯ ", 'defaults';
+
 #XXX this needs testing for wide and zero-width strings
 
 done_testing;

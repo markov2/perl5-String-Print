@@ -28,9 +28,14 @@ my @default_modifiers   = (
 	qr/DATE\b/       => \&_modif_date,
 	qr/TIME\b/       => \&_modif_time,
 	qr/\=/           => \&_modif_name,
-	qr!CHOP\([0-9]+(?:\,?[^)]*)\)!    => \&_modif_chop,
-	qr!EL\([0-9]+(?:\,?[^)]*)\)!      => \&_modif_ellipsis,
-	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)! => \&_modif_undef,
+	qr!CHOP\([0-9]+(?:\,?[^)]*)\)|CHOP\b! => \&_modif_chop,
+	qr!EL\([0-9]+(?:\,?[^)]*)\)|EL\b!     => \&_modif_ellipsis,
+	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)!     => \&_modif_undef,
+);
+
+my %defaults = (
+	EL   => +{ width => 20, replace => '⋯ '},
+	CHOP => +{ width => 20, head => '[', units => '', tail => ']' },
 );
 
 my %default_serializers = (
@@ -65,7 +70,7 @@ String::Print - printf alternative
 
   # interpolation of arrays and hashes (serializers)
   printi 'price-list: {prices}', prices => \@p, _join => "+";
-  printi 'dump: {c}', c => \%config;
+  printi 'dump: {c}', c => \%data;
 
   # same with positional parameters
   printp 'age %d", 12;
@@ -76,7 +81,7 @@ String::Print - printf alternative
   printi 'price: {price%.2f}', price => 3.14 * EURO;
 
   # [0.91] more complex interpolation names
-  printi 'filename: {c.filename}', c => \%config;
+  printi 'filename: {c.filename}', c => \%data;
   printi 'username: {user.name}', user => $user_object;
   printi 'price: {product.price €}', product => $db->product(3);
 
@@ -153,6 +158,11 @@ is used when you specify the predefined string C<HTML>.  See M<encodeFor()>.
 from the parameter list.  In that case, a warning is produced and undef
 inserted.  May can overrule that behavior.
 
+=option  defaults   \%defaults
+=default defaults   C<see modifier docs>
+[1.00] change the defaults for some modifiers.  This is a map of
+modifier name to HASH with modifier specific settings.
+
 =examples
 
   my $f = String::Print->new(
@@ -177,6 +187,9 @@ sub init($)
 
 	my $s    = $args->{serializers} || {};
 	my $seri = $self->{SP_seri} = +{ %default_serializers, (ref $s eq 'ARRAY' ? @$s : %$s) };
+
+	$self->{SP_defs} = +{ %defaults };  # the HASHes get copied when changed.
+	$self->setDefaults($args->{defaults}) if $args->{defaults};
 
 	$self->encodeFor($args->{encode_for});
 	$self->{SP_missing} = $args->{missing_key} || \&_reportMissingKey;
@@ -253,10 +266,37 @@ sub encodeFor($)
 	$self->{SP_enc} = \%def;
 }
 
-#XXX
-# OODoc does not like it when we have methods and functions with the same name.
+=method setDefaults \%defaults|@defaults
+[1.00] Set the defaults for modifiers, either with a HASH where the key modifier name
+maps to a HASH of settings, or a list of PAIRS.
+
+  $obj->setDefaults(EL => { width => 30 });
+
+=cut
+
+sub setDefaults(@)
+{	my $self    = shift;
+	my $default = $self->{SP_defs};
+
+	my @set = @_==1 && ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
+	while(@set)
+	{	my ($modif, $defs) = (shift @set, shift @set);
+		my $was = $defaults{$modif} or die "No defaults available for $modif.";
+		$default->{$modif} = +{ %$was, %$defs };
+	}
+
+	$self;
+}
+
+=method defaults $modifier
+[1.00] Returns the current defaults for the $modifier.
+=cut
+
+sub defaults($) { $_[0]->{SP_defs}{$_[1]} }
 
 #--------------------
+#XXX OODoc does not like it when we have methods and functions with the same name.
+
 =section Printing
 
 The following are provided as method and as function.  You find their
@@ -619,14 +659,11 @@ sub _modif_name($$$)
 sub _modif_chop($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ CHOP\( ([0-9]+) \,? ([^)]+)? \)/x or die $format;
+	$format =~ m/^ CHOP\( ([0-9]+) \,? ([^)]+)? \) | CHOP\b /x or die $format;
 
-	my ($width, $extra) = ($1, $2 // '');
+	my $defaults = $self->defaults('CHOP');
+	my ($width, $units) = ($1 // $defaults->{width}, $2 // $defaults->{units});
 	$width != 0 or return $value;
-
-	my $extra_columns = length $extra
-	  ? Unicode::GCString->new(is_utf8($extra) ? $extra : decode(latin1 => $extra))->columns
-	  : 0;
 
 	# max width of a char is 2
 	return $value if 2 * length $value < $width;    # surely small enough?
@@ -634,20 +671,23 @@ sub _modif_chop($$$)
 	my $v = Unicode::GCString->new(is_utf8($value) ? $value : decode(latin1 => $value));
 	return $value if $width >= $v->columns;          # small enough after counting
 
+	my $head = $defaults->{head};
+	my $tail = $defaults->{tail};
+
 	#XXX This is expensive for long texts, but the value could be filled with many zero-widths
-	my ($shortened, $append) = (0, "[+0$extra]");
+	my ($shortened, $append) = (0, $head . '+0' . $units . $tail);
 	while($v->columns > $width - length $append)
 	{	my $chopped = $v->substr(-1, 1, '');
 
 		unless($chopped->length)
 		{	# nothing left
-			$append = "[$shortened$extra]";
+			$append = $head . $shortened . $units . $tail;
 			last;
 		}
 
 		$chopped->columns > 0 or next;
 		$shortened++;
-		$append     = "[+$shortened$extra]";
+		$append     = $head . '+' . $shortened . $units . $tail;
 	}
 
 	# might be one column short
@@ -658,9 +698,10 @@ sub _modif_chop($$$)
 sub _modif_ellipsis($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ EL\( ([0-9]+) \,? ([^)]+)? \)/x or die $format;
+	$format =~ m/^ EL\( ([0-9]+) \,? ([^)]+)? \) | EL\b /x or die $format;
 
-	my ($width, $replace) = ($1, $2 // '⋯ ');
+	my $defaults = $self->defaults('EL');
+	my ($width, $replace) = ($1 // $defaults->{width}, $2 // $defaults->{replace});
 	$width != 0 or return $value;
 
 	# max width of a char is 2
@@ -1184,7 +1225,7 @@ name before the value.  It might simplify debugging statements.
   "visitors: {count=}", count => 1;      # visitors: count=1
   "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
 
-=subsection Modifier: EL($width) or EL($width,$replace)
+=subsection Modifier: EL, EL($width), or EL($width,$replace)
 
 [1.00] When the string is larger than C<$width> columns, then chop it
 short and add a 'mid-line ellipsis' character: C< ⋯  >.  You may also
@@ -1200,15 +1241,32 @@ columns wide.
   "Intro: {text EL(10,XY)}";  # Intro: 12345678XY 
   "Intro: {text EL(10XY)}";   # Intro: 12345678XY 
 
-=subsection Modifier: CHOP($width) or CHOP($width,$extra)
+The defaults for EL are '20' and '⋯' (mid-dots).  You can changes these
+with M<setDefaults()>:
 
-[1.00] When the string is larger than C<$width> columns, then chop it
-short and add C<< [+42] >>: the number of character chopped off.  The
-C<$width> is the size of the result string.  The comma is optional.
+  $sp->setDefaults(EL => { width => 10, replace => '⋮' });
+  $sp->printi("Intro: {text EL}"); # Intro: 12345678⋯ 
+
+=subsection Modifier: CHOP, CHOP($width) or CHOP($width,$units)
+
+[1.00] When the string is larger than C<$width> columns (defaults to
+20), then chop it short and add C<< [+42] >>: the number of character
+chopped off.  The C<$width> is the size of the result string.
+The comma is optional.
 
   "Intro: {text CHOP(10)}";        # Intro: 12345[+42]
   "Intro: {text CHOP(19 chars)}";  # Intro: 1234578[+33 chars]
   "Intro: {text CHOP(19, chars)}"; # Intro: 1234578[+33 chars]
+
+The same effect can be reached by setting the defaults
+
+  $sp->setDefaults(CHOP => +{width => 19, units => ' chars'});
+  $sp->printi("Intro: {text CHOP}", text => $t); # Intro: 1234578[+33 chars]
+
+Other defaults are C<head> (C<<[>>) and C<tail> (C<<]>>).
+
+  $sp->setDefaults(CHOP => +{head => '«', tail => '»'});
+  $sp->printi("Intro: {text CHOP}", text => $t); # Intro: 1234578«+12»
 
 =subsection Private modifiers
 

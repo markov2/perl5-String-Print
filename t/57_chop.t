@@ -39,6 +39,12 @@ is $f->sprinti("Intro: {text CHOP(3)}", text => $text1),
 is $f->sprinti("Intro: {text CHOP(5 chars)}", text => $text1),
 	"Intro: [30 chars]", 'chop too short with extra';
 
+$f->setDefaults(CHOP => +{width => 19, units => ' chars'});
+is $f->sprinti("Intro: {text CHOP}", text => $text1), 'Intro: 12345678[+22 chars]', 'chop with changed defaults';
+
+$f->setDefaults(CHOP => +{head => '«', tail => '»'});
+is $f->sprinti("Intro: {text CHOP}", text => $text1), 'Intro: 123456789012345«+15»', 'chop with other head/tail';
+
 #XXX this needs testing for wide and zero-width strings
 
 done_testing;
