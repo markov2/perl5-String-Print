@@ -62,7 +62,7 @@ my %optional = (
 );
 
 WriteMakefile
-	NAME      => 'String-Print',
+	NAME      => 'String::Print',
 	VERSION   => $version,
 	AUTHOR     => 'Mark Overmeer <markov@cpan.org>',
 	ABSTRACT   => 'printf extensions',

@@ -68,7 +68,9 @@ String::Print - printf alternative
 
   use String::Print;           # simpelest way
   use String::Print qw/printi printp/, %config;
-  printi 'age {years}', years => 12;
+
+  printi 'age {years}', years => 12;   # to STDOUT
+  my $s = sprinti 'age {years}', years => 12;  # in variable
 
   # interpolation of arrays and hashes (serializers)
   printi 'price-list: {prices}', prices => \@p, _join => "+";
@@ -78,6 +80,7 @@ String::Print - printf alternative
   printp 'age %d", 12;
   printp 'price-list: %.2f', \@prices;
   printp 'dump: %s', \%settings;
+  my $s = sprintp 'age %d", 12;
 
   # modifiers
   printi 'price: {price%.2f}', price => 3.14 * EURO;
@@ -93,6 +96,8 @@ String::Print - printf alternative
   my $f = String::Print->new(%config);
   $f->printi('age {years}', years => 12);
   $f->printp('age %d', 12);
+  my $s = $f->sprinti('age {y}', y => 12);
+  my $s = $f->sprintp('age %d', 12);
 
   ### via Log::Report's __* functions (optional translation)
 
