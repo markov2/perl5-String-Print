@@ -631,7 +631,12 @@ my %dt_format = (
 
 sub _modif_year($$$)
 {	my ($self, $format, $value, $args) = @_;
-	defined $value && length $value or return undef;
+	defined $value or return undef;
+
+	blessed $value && $value->isa('DateTime')
+		and return $value->year;
+
+	length $value or return undef;
 
 	return $1
 		if $value =~ /^\s*([0-9]{4})\s*$/ && $1 < 2200;
@@ -644,7 +649,12 @@ sub _modif_year($$$)
 
 sub _modif_date($$$)
 {	my ($self, $format, $value, $args) = @_;
-	defined $value && length $value or return undef;
+	defined $value or return undef;
+
+	blessed $value && $value->isa('DateTime')
+		and return $value->ymd;
+
+	length $value or return undef;
 
 	return sprintf("%4d-%02d-%02d", $1, $2, $3)
 		if $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
@@ -658,7 +668,12 @@ sub _modif_date($$$)
 
 sub _modif_time($$$)
 {	my ($self, $format, $value, $args) = @_;
-	defined $value && length $value or return undef;
+	defined $value or return undef;
+
+	blessed $value && $value->isa('DateTime')
+		and return $value->hms;
+
+	length $value or return undef;
 
 	return sprintf "%02d:%02d:%02d", $1, $2, $3||0
 		if $value =~ m!^\s*(0?[0-9]|1[0-9]|2[0-3])\:([0-5]?[0-9])(?:\:([0-5]?[0-9]))?\s*$!
@@ -672,7 +687,12 @@ sub _modif_time($$$)
 
 sub _modif_dt($$$)
 {	my ($self, $format, $value, $args) = @_;
-	defined $value && length $value or return undef;
+	defined $value or return undef;
+
+	blessed $value && $value->isa('DateTime')
+		and $value = $value->epoch;
+
+	length $value or return undef;
 
 	my $defaults = $self->defaults('DT');
 	my $kind     = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || $defaults->{standard};
@@ -1188,24 +1208,31 @@ and " 27 MB".
 little flexible in values they accept, but do not expect miracles: when
 it get harder, you will need to process it yourself.
 
-The actual treatment of a time value depends on the value: three
+The actual treatment of a time value depends on the value.  Four
 different situations:
 
 =over 4
 
 =item 1. numeric
-
 A pure numeric value is considered "seconds since epoch", unless it
 is smaller than 21000000, in which case it is taken as date without
 separators.
 
-=item 2. date format without time-zone
+=item 2. M<DateTime> object
+Use a M<DateTime> object to provide the value.  This way, the format
+does not need to know whether the date is specified as object or as
+string.
 
+  my $now = DateTime->now;
+  printi "{t YEAR}", t => $now;
+  printi "{t.year YEAR}", t => $now;  # same effect
+
+=item 3. date format without time-zone
 The same formats are understood as in the next option, but without
 time-zone information.  The date is processed as text as if in the
 local time zone, and the output in the local time-zone.
 
-=item 3. date format with time-zone
+=item 4. date format with time-zone
 
 By far not all possible date formats are supported, just a few common
 versions, like

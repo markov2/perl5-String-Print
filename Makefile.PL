@@ -57,6 +57,10 @@ my %requires = (
 	'Date::Parse'       => 2.30,
 );
 
+my %optional = (
+	'DateTime'          => 1.00,
+);
+
 WriteMakefile
 	NAME      => 'String-Print',
 	VERSION   => $version,
@@ -81,6 +85,7 @@ WriteMakefile
 		prereqs => {
 			runtime => {
 				requires => \%requires,
+				optional => \%optional,
 			},
 			develop => {
 				requires => {

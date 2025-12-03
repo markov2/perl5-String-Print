@@ -61,4 +61,15 @@ if($devel)
 	is $f->sprinti("{t DT}", t => $now), '2017-06-23T15:33:43+0200', 'dt setDefault';
 }
 
+### DateTime object
+
+if($devel)
+{	require DateTime;
+	my $dt = DateTime->from_epoch(epoch => $now);
+	is $f->sprinti("{t YEAR}", t => $dt),       '2017', 'DateTime year';
+	is $f->sprinti("{t DATE}", t => $dt), '2017-06-23', 'DateTime date';
+	is $f->sprinti("{t TIME}", t => $dt),   '13:33:43', 'DateTime time';
+	is $f->sprinti("{t DT(FT)}", t => $now), '2017-06-23 15:33:43', 'DateTime dt';
+}
+
 done_testing;

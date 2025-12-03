@@ -12,6 +12,7 @@ version 1.00:
 	- add chop modifier
 	- add defaults configuration
 	- better document encodeFor()
+	- add DateTime support for time modifiers
 
 version 0.96: Fri 12 Sep 14:01:16 CEST 2025
 
