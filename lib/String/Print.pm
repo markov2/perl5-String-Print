@@ -34,9 +34,10 @@ my @default_modifiers   = (
 );
 
 my %defaults = (
-	CHOP => +{ width => 20, head => '[', units => '', tail => ']' },
-	DT   => +{ standard => 'FT' },
-	EL   => +{ width => 20, replace => '⋯ '},
+	CHOP   => +{ width => 20, head => '[', units => '', tail => ']' },
+	DT     => +{ standard => 'FT' },
+	EL     => +{ width => 20, replace => '⋯ '},
+	FORMAT => +{ thousands => '' },
 );
 
 my %default_serializers = (
@@ -277,6 +278,9 @@ sub encodeFor($)
 =method setDefaults \%defaults|@defaults
 [1.00] Set the defaults for modifiers, either with a HASH where the key modifier name
 maps to a HASH of settings, or a list of PAIRS.
+
+When using the methods in OO style , you can change the defaults at any time.  For
+functional style, the object is hidden.
 
 =example setting defaults
 
@@ -557,7 +561,7 @@ sub _modif_format_s($$$$$)
 sub _modif_format_d($$$$)
 {	my ($value, $padding, $max, $sep) = @_;
 	my $d = sprintf "%d", $value;   # what perl usually does with floats etc
-	my $v = reverse(reverse($d) =~ s/([0-9][0-9][0-9])/$1$sep/gr);
+	my $v = length $sep ? reverse(reverse($d) =~ s/([0-9][0-9][0-9])/$1$sep/gr) : $d;
 	$v =~ s/^\.//;
 
 	if($d !~ /^\-/)
@@ -570,6 +574,7 @@ sub _modif_format_d($$$$)
 
 	    $pad <= 0       ? $v 
 	  : $padding eq '-' ? $v . (' ' x $pad)
+	  : $padding eq '0' ? ('0' x $pad) . $v
 	  : $padding eq ''  ? (' ' x $pad) . $v
 	  :   $v;
 }
@@ -577,6 +582,8 @@ sub _modif_format_d($$$$)
 sub _modif_format($$$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
+
+	my $defaults = $self->defaults('FORMAT');
 
 	use locale;
 	if(ref $value eq 'ARRAY')
@@ -589,7 +596,7 @@ sub _modif_format($$$$)
 	}
 
 	  $format =~ m/^\%(\-?)([0-9]*)(?:\.([0-9]*))?([sS])$/ ? _modif_format_s($value, $1, $2, $3, $4)
-	: $format =~ m/^\%([+\ \-]?)([0-9]*)([_,.])d$/ ? _modif_format_d($value, $1, $2, $3)
+	: $format =~ m/^\%([+\ \-0]?)([0-9]*)([_,.])?d$/ ? _modif_format_d($value, $1, $2, $3 // $defaults->{thousands})
 	:    return sprintf $format, $value;   # simple: standard perl sprintf()
 }
 
@@ -1171,7 +1178,7 @@ specify its width, then there is no performance penalty for using 'S'.
   # name right aligned, commas on same position, always
   printp "name: {name%20S},\n", name => $some_chinese;
 
-=subsubsection POSIX modifier extensions '%[+ -]?[0-9]*[_,.]d'
+=subsubsection POSIX modifier extensions '%[+ -0]?[0-9]*[_,.]?d'
 
 [0.96] Only available when you print (big) decimals: add an underscore,
 comma, or dot on the thousands.
@@ -1187,6 +1194,19 @@ comma, or dot on the thousands.
   printi "'{v%+10,d}'", v =>  10000;   # '   +10,000';
   printi "'{v% ,d}'",   v =>  10000;   # ' 10,000';
   printi "'{v% ,d}'",   v => -10000;   # '-10,000';
+
+[1.00] You can set the default C<FORMAT> separator:
+
+  use String::Print
+      defaults => [ FORMAT => { thousands => ',' } ];
+
+  # or
+  my $sp = String::Print->new(
+     defaults => { FORMAT => { thousands => ',' }},
+  );
+
+  # or
+  $sp->setDefaults(FORMAT => { thousands => ',' });
 
 =subsection Modifier: BYTES
 
@@ -1219,13 +1239,14 @@ is smaller than 21000000, in which case it is taken as date without
 separators.
 
 =item 2. M<DateTime> object
-Use a M<DateTime> object to provide the value.  This way, the format
-does not need to know whether the date is specified as object or as
-string.
+[1.00] Use a M<DateTime> object to provide the value.  This way, the
+format does not need to know whether the date is specified as object or
+as string.
 
   my $now = DateTime->now;
-  printi "{t YEAR}", t => $now;
-  printi "{t.year YEAR}", t => $now;  # same effect
+  printi "{t YEAR}", t => $now;  # works for DateTime, epoch and string
+  printi "{t.year YEAR}", t => $now;  # same effect, DateTime only
+  printi "{t.year}", t => $now;  # will also work, not as nice
 
 =item 3. date format without time-zone
 The same formats are understood as in the next option, but without
