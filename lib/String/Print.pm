@@ -12,6 +12,7 @@ use utf8;
 #use Log::Report::Optional 'log-report';
 
 use Unicode::GCString ();
+use Data::Dumper      ();
 use Date::Parse       qw/str2time/;
 use Encode            qw/is_utf8 decode/;
 use HTML::Entities    qw/encode_entities/;
@@ -28,16 +29,18 @@ my @default_modifiers   = (
 	qr/DATE\b/       => \&_modif_date,
 	qr/TIME\b/       => \&_modif_time,
 	qr/\=/           => \&_modif_name,
+	qr!UNKNOWN\([0-9]+\)|UNKNOWN\b!       => \&_modif_unknown,
 	qr!CHOP\([0-9]+(?:\,?[^)]*)\)|CHOP\b! => \&_modif_chop,
 	qr!EL\([0-9]+(?:\,?[^)]*)\)|EL\b!     => \&_modif_ellipsis,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)!     => \&_modif_undef,
 );
 
 my %defaults = (
-	CHOP   => +{ width => 20, head => '[', units => '', tail => ']' },
-	DT     => +{ standard => 'FT' },
-	EL     => +{ width => 20, replace => '⋯ '},
-	FORMAT => +{ thousands => '' },
+	CHOP      => +{ width => 30, head => '[', units => '', tail => ']' },
+	DT        => +{ standard => 'FT' },
+	EL        => +{ width => 30, replace => '⋯ '},
+	FORMAT    => +{ thousands => '' },
+	UNKNOWN   => +{ width => 30, trim => 'EL' },
 );
 
 my %default_serializers = (
@@ -732,10 +735,11 @@ sub _modif_name($$$)
 sub _modif_chop($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ CHOP\( ([0-9]+) \,? ([^)]+)? \) | CHOP\b /x or die $format;
 
 	my $defaults = $self->defaults('CHOP');
-	my ($width, $units) = ($1 // $defaults->{width}, $2 // $defaults->{units});
+	$format =~ m/^ CHOP\( ([0-9]+) \,? ([^)]+)? \) | CHOP\b /x or die $format;
+	my $width    = $1 // $args->{width} // $defaults->{width};
+	my $units    = $2 // $args->{units} // $defaults->{units};
 	$width != 0 or return $value;
 
 	# max width of a char is 2
@@ -771,10 +775,11 @@ sub _modif_chop($$$)
 sub _modif_ellipsis($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
-	$format =~ m/^ EL\( ([0-9]+) \,? ([^)]+)? \) | EL\b /x or die $format;
 
 	my $defaults = $self->defaults('EL');
-	my ($width, $replace) = ($1 // $defaults->{width}, $2 // $defaults->{replace});
+	$format =~ m/^ EL\( ([0-9]+) \,? ([^)]+)? \) | EL\b /x or die $format;
+	my $width    = $1 // $args->{width}   // $defaults->{width};
+	my $replace  = $2 // $args->{replace} // $defaults->{replace};
 	$width != 0 or return $value;
 
 	# max width of a char is 2
@@ -793,6 +798,28 @@ sub _modif_ellipsis($$$)
 	# might be one column short
 	my $pad = $v->columns + $r->columns < $width ? ' ' : '';
 	$v->as_string . $pad . $replace;
+}
+
+sub _modif_unknown($$$)
+{	my ($self, $format, $value, $args) = @_;
+	defined $value or return undef;
+
+	my $defaults = $self->defaults('UNKNOWN');
+	$format =~ m/^ UNKNOWN\( ([0-9]+) \) | UNKNOWN\b /x or die $format;
+	$args->{width} = $1 // $args->{width} // $defaults->{width};
+
+	return ref $value
+		if blessed $value;
+
+	my $serial = Data::Dumper->new([$value])->Quotekeys(0)->Terse(1)->Useqq(1)->Indent(0)->Sortkeys(1)->Dump;
+
+	my $trim   = $args->{trim} // $defaults->{trim};
+	my $trimmer = $trim eq 'EL' ? '_modif_ellipsis' : $trim eq 'CHOP' ? '_modif_chop' : die $trim;
+
+	  ! reftype $value          ?  '"' . $self->$trimmer($trim, $serial =~ s/^\"//r =~ s/\"$//r, $args) . '"'
+	: reftype $value eq 'ARRAY' ?  '[' . $self->$trimmer($trim, $serial =~ s/^\[//r =~ s/\]$//r, $args) . ']'
+	: reftype $value eq 'HASH'  ?  '{' . $self->$trimmer($trim, $serial =~ s/^\{//r =~ s/\}$//r, $args) . '}'
+	:     $self->_modif_ellipsis($trim, $serial, $args);
 }
 
 =function printi [$fh], $format, %data|\%data
@@ -1364,6 +1391,34 @@ Other defaults are C<head> (C<<[>>) and C<tail> (C<<]>>).
 
   $sp->setDefaults(CHOP => +{head => '«', tail => '»'});
   $sp->printi("Intro: {text CHOP}", text => $t); # Intro: 1234578«+12»
+
+=subsection Modifier: UNKNOWN or UNKNOWN($width)
+
+[1.01] When you need to interpolate a value which is unknown and potentially
+unsafe, then use this.  For instance, you produce an internal error message
+to report that a method is used incorrectly:
+
+  sub openFolder
+  {  my ($self, $folder) = @_;
+
+     blessed $folder && $folder->isa('Mail::Box')
+        or printi "ERROR: expected a Mail::Box, got a {t UNKNOWN}.",
+              t => $folder;
+  }
+
+Now, this C<$folder> parameter is clearly wrong.  But what is it?  Did we
+pass a wrong object type?  Did we pass a string?  An ARRAY maybe?
+
+The C<UNKNOWN> modifier distibuishes the following:
+=over 4
+=item * undefined values will be shown as the UNDEF serializer does;
+=item * objects will be represented by their type;
+=item * references will show the first part of their Data::Dumper dump; and
+=item * the leading parts of strings will be shown between double quotes.
+=back
+
+Care is taken that weird characters are escaped.  The shortening uses the
+C<trim> setting: either C<'EL'> (default) or C<'CHOP'>.
 
 =subsection Private modifiers
 

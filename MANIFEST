@@ -21,4 +21,5 @@ t/54m_html.t
 t/55m_name.t
 t/56_ellipsis.t
 t/57_chop.t
+t/58_unknown.t
 xt/99pod.t
