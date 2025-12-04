@@ -1211,10 +1211,17 @@ specify its width, then there is no performance penalty for using 'S'.
   # name right aligned, commas on same position, always
   printp "name: {name%20S},\n", name => $some_chinese;
 
-=subsubsection POSIX modifier extensions '%[+ -0]?[0-9]*[_,.]?d'
+=subsubsection POSIX modifier extensions '%d'
 
-[0.96] Only available when you print (big) decimals: add an underscore,
-comma, or dot on the thousands.
+The full pattern is pretty complex: C<< %[+ -0]?[0-9]*[_,.]?d >>, POSIX
+format style with a few extra features.  The middle (optional) digits tell
+the minimal size of the integer to be displayed.  The optional character
+before it says: C<+> will add a '+' sign when positive, 'blank' adds one
+blank before the digits when positive, a C<0> pads left with zeros instead
+of blanks.  Finally, a C<-> means left-align padding blanks on the right.
+
+[0.96] The last pattern is only useful when you print (big) decimals:
+add an underscore, comma, or dot on the thousands.
 
   printi "{count%_d}\n", count => 1e9;   # 1_000_000_000
   printi "{count%,d}\n", count => 1e9;   # 1,000,000,000
@@ -1561,7 +1568,7 @@ Better not to have HTML in your program: leave it to the template.  But
 in some cases, you have no choice.
 
 
-=section String::Print Compared to other modules on CPAN
+=section String::Print compared to other modules on CPAN
 
 There are a quite a number of modules on CPAN which extend the functionality
 of C<printf()>.  To name a few:
