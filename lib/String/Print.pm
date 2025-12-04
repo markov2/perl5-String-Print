@@ -811,15 +811,16 @@ sub _modif_unknown($$$)
 	return ref $value
 		if blessed $value;
 
-	my $serial = Data::Dumper->new([$value])->Quotekeys(0)->Terse(1)->Useqq(1)->Indent(0)->Sortkeys(1)->Dump;
-
-	my $trim   = $args->{trim} // $defaults->{trim};
+	my $trim    = $args->{trim} // $defaults->{trim};
 	my $trimmer = $trim eq 'EL' ? '_modif_ellipsis' : $trim eq 'CHOP' ? '_modif_chop' : die $trim;
+	my $shorten = sub { $self->$trimmer($trim, $_[0], $args) };
 
-	  ! reftype $value          ?  '"' . $self->$trimmer($trim, $serial =~ s/^\"//r =~ s/\"$//r, $args) . '"'
-	: reftype $value eq 'ARRAY' ?  '[' . $self->$trimmer($trim, $serial =~ s/^\[//r =~ s/\]$//r, $args) . ']'
-	: reftype $value eq 'HASH'  ?  '{' . $self->$trimmer($trim, $serial =~ s/^\{//r =~ s/\}$//r, $args) . '}'
-	:     $self->_modif_ellipsis($trim, $serial, $args);
+	my $serial  = Data::Dumper->new([$value])->Quotekeys(0)->Terse(1)->Useqq(1)->Indent(0)->Sortkeys(1)->Dump;
+
+	  ! reftype $value          ?  '"' . $shorten->($serial =~ s/^\"//r =~ s/\"$//r) . '"'
+	: reftype $value eq 'ARRAY' ?  '[' . $shorten->($serial =~ s/^\[//r =~ s/\]$//r) . ']'
+	: reftype $value eq 'HASH'  ?  '{' . $shorten->($serial =~ s/^\{//r =~ s/\}$//r) . '}'
+	:     $shorten->($serial);
 }
 
 =function printi [$fh], $format, %data|\%data
@@ -1474,11 +1475,10 @@ formatter understands where one ends and the next begins.
 The modifiers are called in order:
 
   printi "price: {p€%9s}\n", p => $p; # price: ␣␣␣123.45
-  printi "!{t T%10s}!", t => $now;    # !␣␣12:59:17!
+  printi "!{t TIME%10s}!", t => $now; # !␣␣12:59:17!
 
   printp "price: %9{€}s\n", $p;       # price: ␣␣␣123.45
-  printp "!%10{T}s!", $now;           # !␣␣12:59:17!
-
+  printp "!%10{TIME}s!", $now;        # !␣␣12:59:17!
 
 =section Output encoding
 
