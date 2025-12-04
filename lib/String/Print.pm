@@ -570,7 +570,7 @@ sub _modif_format_d($$$$)
 {	my ($value, $padding, $max, $sep) = @_;
 	my $d = sprintf "%d", $value;   # what perl usually does with floats etc
 	my $v = length $sep ? reverse(reverse($d) =~ s/([0-9][0-9][0-9])/$1$sep/gr) : $d;
-	$v =~ s/^\.//;
+	$v =~ s/^\Q$sep//;
 
 	if($d !~ /^\-/)
 	{	$v = "+$v" if $padding eq '+';
