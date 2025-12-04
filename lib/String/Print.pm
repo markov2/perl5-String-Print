@@ -160,10 +160,10 @@ passed to C<print[ip]> itself.
 =default serializers <useful defaults>
 How to serialize data elements.
 
-=option  encode_for HASH|'HTML'
+=option  encode_for \%rules|'HTML'
 =default encode_for undef
 [0.91] The format string and the inserted values will get encoded according to
-some syntax rules.  Function C<encode_entities()> provided by HTML::Entities
+some %rules.  Function C<encode_entities()> provided by HTML::Entities
 is used when you specify the predefined string C<HTML>.  See M<encodeFor()>
 and L</Output encoding>.
 
@@ -173,9 +173,9 @@ and L</Output encoding>.
 from the parameter list.  In that case, a warning is produced and undef
 inserted.  May can overrule that behavior.
 
-=option  defaults   \%defaults
-=default defaults   C<see modifier docs>
-[1.00] change the defaults for some modifiers.  This is a map of
+=option  defaults \%map
+=default defaults C<see modifier docs>
+[1.00] change the defaults for some modifiers.  This is a %map of
 modifier name to HASH with modifier specific settings.
 
 =examples
