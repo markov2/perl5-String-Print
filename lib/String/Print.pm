@@ -613,7 +613,7 @@ sub _modif_bytes($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value && length $value or return undef;
 
-	return sprintf("%3d  B", $value) if $value < 1000;
+	return sprintf("%3d B", $value) if $value < 1000;
 
 	my @scale = qw/kB MB GB TB PB EB ZB/;
 	$value /= 1024;
@@ -623,10 +623,10 @@ sub _modif_bytes($$$)
 		$value /= 1024;
 	}
 
-	return sprintf "%3d $scale[0]", $value + 0.5
+	return sprintf "%3d$scale[0]", $value + 0.5
 		if $value > 9.949;
 
-	sprintf "%3.1f $scale[0]", $value;
+	sprintf "%3.1f$scale[0]", $value;
 }
 
 sub _modif_html($$$)
@@ -1255,14 +1255,14 @@ format.  The C<BYTES> modifier simplifies this a lot:
 
   printp "{size BYTES} {fn}\n", fn => $fn, size => -s $fn;
 
-The output will always be 6 characters.  Examples are "999  B", "1.2 kB",
-and " 27 MB".
+The output will always be 5 characters.  Examples are "999 B", "1.2kB",
+and " 27MB".
 
 =subsection Modifier: HTML
 
 [0.95] interpolate the parameter with HTML entity encoding.
 
-=subsection Modifiers: YEAR, DATE, TIME, DT, and DT()
+=subsection Modifiers: YEAR, DATE, TIME, and DT()
 
 [0.91] A set of modifiers help displaying dates and times.  They are a
 little flexible in values they accept, but do not expect miracles: when
@@ -1357,7 +1357,7 @@ name before the value.  It might simplify debugging statements.
   "visitors: {count=}", count => 1;      # visitors: count=1
   "v: {count %-8,d =}X", count => 10000; # v: count=10,000␣␣X
 
-=subsection Modifier: EL, EL($width), or EL($width,$replace)
+=subsection Modifier: EL or EL($width, [$replace])
 
 [1.00] When the string is larger than C<$width> columns, then chop it
 short and add a 'mid-line ellipsis' character: C< ⋯  >.  You may also
@@ -1379,7 +1379,7 @@ with M<setDefaults()>:
   $sp->setDefaults(EL => { width => 10, replace => '⋮' });
   $sp->printi("Intro: {text EL}"); # Intro: 12345678⋯ 
 
-=subsection Modifier: CHOP, CHOP($width) or CHOP($width,$units)
+=subsection Modifier: CHOP or CHOP($width, [$units])
 
 [1.00] When the string is larger than C<$width> columns (defaults to
 20), then chop it short and add C<< [+42] >>: the number of character

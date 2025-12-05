@@ -6,6 +6,9 @@ stated differently.
 
 version 1.02:
 
+	Changes:
+	- remove the blank before kB in BYTES.
+
 	Fixes:
 	- remove correct redundant separator from thousands in %d
 
