@@ -24,23 +24,38 @@ my @default_modifiers   = (
 	qr/BYTES\b/      => \&_modif_bytes,
 	qr/HTML\b/       => \&_modif_html,
 	qr/YEAR\b/       => \&_modif_year,
-	qr/DT\([^)]*\)/  => \&_modif_dt,
-	qr/DT\b/         => \&_modif_dt,
-	qr/DATE\b/       => \&_modif_date,
 	qr/TIME\b/       => \&_modif_time,
 	qr/\=/           => \&_modif_name,
+	qr/DATE\([^)]*\)|DATE\b/ => \&_modif_date,
+	qr/DT\([^)]*\)|DT\b/     => \&_modif_dt,
 	qr!UNKNOWN\([0-9]+\)|UNKNOWN\b!       => \&_modif_unknown,
 	qr!CHOP\([0-9]+(?:\,?[^)]*)\)|CHOP\b! => \&_modif_chop,
 	qr!EL\([0-9]+(?:\,?[^)]*)\)|EL\b!     => \&_modif_ellipsis,
 	qr!//(?:\"[^"]*\"|\'[^']*\'|\w+)!     => \&_modif_undef,
 );
 
+# Be warned: %F and %T (from C99) are not always supported on Windows
+my %dt_format = (
+	ASC     => '%a %b %e %H:%M:%S %Y',
+	ISO     => '%Y-%m-%dT%H:%M:%S%z',
+	RFC822  => '%a, %d %b %y %H:%M:%S %z',
+	RFC2822 => '%a, %d %b %Y %H:%M:%S %z',
+	RFC5322 => '%a, %d %b %Y %H:%M:%S %z',
+	FT      => '%Y-%m-%d %H:%M:%S',
+);
+
+my %date_format = (
+	'-'     => '%Y-%m-%d',
+	'/'     => '%Y/%m/%d',
+);
+
 my %defaults = (
 	CHOP      => +{ width => 30, head => '[', units => '', tail => ']' },
-	DT        => +{ standard => 'FT' },
-	EL        => +{ width => 30, replace => '⋯ '},
+	DATE      => +{ format => $date_format{'-'}, },
+	DT        => +{ format => $dt_format{FT}, },
+	EL        => +{ width  => 30, replace => '⋯ '},
 	FORMAT    => +{ thousands => '' },
-	UNKNOWN   => +{ width => 30, trim => 'EL' },
+	UNKNOWN   => +{ width  => 30, trim => 'EL' },
 );
 
 my %default_serializers = (
@@ -345,7 +360,7 @@ easier, but the object version is most flexible.
   my $sp = String::Print->new(
     modifiers   => [ EUR   => sub {sprintf "%5.2f e", $_[0]} ],
     serializers => [ UNDEF => sub {'-'} ],
-    defaults    => [ DT => { standard => 'ISO' } ],
+    defaults    => [ DT    => { standard => 'ISO' } ],
   );
 
   $sp->printi("price: {p EUR}", p => 3.1415); # price: ␣␣3.14 e
@@ -634,16 +649,6 @@ sub _modif_html($$$)
 	defined $value ? (encode_entities $value) : undef;
 }
 
-# Be warned: %F and %T (from C99) are not supported on Windows
-my %dt_format = (
-	ASC     => '%a %b %e %T %Y',
-	ISO     => '%Y-%m-%dT%T%z',
-	RFC822  => '%a, %d %b %y %T %z',
-	RFC2822 => '%a, %d %b %Y %T %z',
-	RFC5322 => '%a, %d %b %Y %T %z',
-	FT      => '%Y-%m-%d %T',
-);
-
 sub _modif_year($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value or return undef;
@@ -666,19 +671,29 @@ sub _modif_date($$$)
 {	my ($self, $format, $value, $args) = @_;
 	defined $value or return undef;
 
-	blessed $value && $value->isa('DateTime')
-		and return $value->ymd;
+	my $defaults = $self->defaults('DATE');
+	my $kind     = ($format =~ m/^DATE\(([^)]*)\)/ ? $1 : undef) || $defaults->{format};
+	my $pattern  = $date_format{$kind} // $kind;
 
-	length $value or return undef;
+	my ($y, $m, $d);
+	if(blessed $value && $value->isa('DateTime'))
+	{	($y, $m, $d) = ($value->year, $value->month, $value->day);
+	}
+	elsif( $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
+		|| $value =~ m!^\s*([0-9]{4})([0-9][0-9])([0-9][0-9])\s*$!)
+	{	($y, $m, $d) = ($1, $2, $3);
+	}
+	else
+	{	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
+		defined $stamp or return "date not found in '$value'";
+		($y, $m, $d) = (localtime $stamp)[5, 4, 3];
+		$y += 1900; $m++;
+	}
 
-	return sprintf("%4d-%02d-%02d", $1, $2, $3)
-		if $value =~ m!^\s*([0-9]{4})[:/.-]([0-9]?[0-9])[:/.-]([0-9]?[0-9])\s*$!
-		|| $value =~ m!^\s*([0-9]{4})([0-9][0-9])([0-9][0-9])\s*$!;
-
-	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
-	defined $stamp or return "date not found in '$value'";
-
-	strftime "%Y-%m-%d", localtime($stamp);
+	$pattern
+		=~ s/\%Y/$y/r
+		=~ s/\%m/sprintf "%02d", $m/re
+		=~ s/\%d/sprintf "%02d", $d/re;
 }
 
 sub _modif_time($$$)
@@ -710,10 +725,8 @@ sub _modif_dt($$$)
 	length $value or return undef;
 
 	my $defaults = $self->defaults('DT');
-	my $kind     = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || $defaults->{standard};
-
-	my $pattern  = $dt_format{$kind}
-		or return "dt format $kind not known";
+	my $kind     = ($format =~ m/^DT\(([^)]*)\)/ ? $1 : undef) || $defaults->{format};
+	my $pattern  = $dt_format{$kind} // $kind;
 
 	my $stamp = $value =~ /\D/ ? str2time($value) : $value;
 	defined $stamp or return "dt not found in '$value'";
@@ -1262,7 +1275,7 @@ and " 27MB".
 
 [0.95] interpolate the parameter with HTML entity encoding.
 
-=subsection Modifiers: YEAR, DATE, TIME, and DT()
+=subsection Modifiers: YEAR, DATE(), TIME, and DT()
 
 [0.91] A set of modifiers help displaying dates and times.  They are a
 little flexible in values they accept, but do not expect miracles: when
@@ -1314,23 +1327,37 @@ converted into the local timezone of the observer.
 
 =back
 
-The output of C<YEAR> is in format 'YYYY', for C<DATE> it will always be
-'YYYY-MM-DD', where C<TIME> produces 'HH:mm:ss'.
+The output of C<YEAR> is in format 'YYYY', where C<TIME> produces 'HH:mm:ss'.
+C<DT> and C<DATE> are configurable.
 
 The DT modifier can produce different formats:
 
-  DT(ASC)     : %a %b %e %T %Y       asctime output
-  DT(FT)      : %F %T                YYYY-MM-DD HH:MM:SS
+  DT(ASC)     : %a %b %e %T %Y       asctime output (not on Windows)
+  DT(FT)      : %F %T                YYYY-MM-DD HH:MM:SS (default)
   DT(ISO)     : %FT%T%z              iso8601
   DT(RFC822)  : %a, %d %b %y %T %z   email old
   DT(RFC2822) : %a, %d %b %Y %T %z   email newer
   DT(RFC5322) : %a, %d %b %Y %T %z   email newest [0.96]
+  DT(%F-%T)                          [1.02] any own format
 
-You may suggest additional formats, or add your own modifier.
+You may suggest additional formats, or add your own modifier.  For your own
+format: be warned that C<%F> and C<%T> are not supported on some Windows
+versions (but the difference is hidden by Perl >5.38).
+
+[1.02] Also, the DATE modifier can produce different formats:
+
+  DATE(-)     : %Y-%m-%d
+  DATE(/)     : %Y/%m/%d
+  DATE(%d-%m-%Y)         any own pattern
+  DATE(%m-%d-%Y)         better not use this broken order
+
+Other fields than C<%Y>, C<%m>, and C<%d> are not supported. Other characters
+are left untouched.
 
 The defaults are:
 
-  DT => { standard => 'FT' },
+  DATE => { format => '-' },
+  DT   => { format => 'FT' },
 
 =subsection Modifier: //word, //"string", //'string'
 

@@ -11,6 +11,12 @@ version 1.02:
 
 	Fixes:
 	- remove correct redundant separator from thousands in %d
+	- do not use %F and %T in date formats, for broken Windows
+	  github issue #2 [Phil Perry]
+
+	Improvements:
+	- flexible format for the DT modifier
+	- formats for DATE modifier
 
 version 1.01: Thu  4 Dec 16:43:36 CET 2025
 
